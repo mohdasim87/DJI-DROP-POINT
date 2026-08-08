@@ -1,0 +1,18 @@
+[Unit]
+Description=DropPoint payload-drop guidance system
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/opt/droppoint/bin/droppoint --config /opt/droppoint/config --credentials /etc/droppoint/credentials.yaml
+Restart=on-failure
+RestartSec=2
+WatchdogSec=5
+User=droppoint
+Group=droppoint
+StandardOutput=append:/var/log/droppoint/service.log
+StandardError=append:/var/log/droppoint/service.log
+
+[Install]
+WantedBy=multi-user.target

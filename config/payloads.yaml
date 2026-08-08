@@ -1,0 +1,54 @@
+# config/payloads.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER for every profile below. `calibrated:
+# false` and an empty `calibration_date` are load-bearing — the software
+# surfaces a soft gate ("PAYLOAD PROFILE UNCALIBRATED", spec section 7)
+# until `tools/calibrate` has processed at least five measured drops per
+# profile (spec section 11) and this file has been updated with the result.
+
+payloads:
+  - name: "medical_pack_2kg"
+    mass_kg: 2.0
+    cda_free: 0.035          # UNCALIBRATED PLACEHOLDER, estimate for a compact rigid pack
+    min_release_agl_m: 15.0
+    max_release_agl_m: 100.0
+    crosswind_limit_mps: 10.0
+    target_radius_m: 3.0
+    mechanism_delay_s: 0.12  # UNCALIBRATED PLACEHOLDER, measure on the bench per docs/CALIBRATION.md
+    calibrated: false
+    calibration_date: ""
+
+  - name: "water_5l"
+    mass_kg: 5.2
+    cda_free: 0.045
+    min_release_agl_m: 15.0
+    max_release_agl_m: 90.0
+    crosswind_limit_mps: 8.0
+    target_radius_m: 4.0
+    mechanism_delay_s: 0.12
+    calibrated: false
+    calibration_date: ""
+
+  - name: "radio_streamer_1kg"
+    mass_kg: 1.0
+    cda_free: 0.02           # free-fall CdA before streamer deployment
+    cda_deployed: 0.12       # CdA once the streamer opens
+    deploy_delay_s: 1.0
+    min_release_agl_m: 25.0  # higher minimum: needs room for the streamer to deploy and slow the payload
+    max_release_agl_m: 100.0
+    crosswind_limit_mps: 10.0
+    target_radius_m: 5.0
+    mechanism_delay_s: 0.10
+    calibrated: false
+    calibration_date: ""
+
+  - name: "flotation_device_3kg"
+    mass_kg: 3.0
+    cda_free: 0.15           # large flat cross-section, deliberately high drag
+    min_release_agl_m: 10.0
+    max_release_agl_m: 60.0
+    crosswind_limit_mps: 12.0
+    target_radius_m: 6.0
+    mechanism_delay_s: 0.15
+    calibrated: false
+    calibration_date: ""

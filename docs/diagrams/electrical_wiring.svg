@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="monospace" font-size="12">
+  <defs>
+    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill:#f5f5f5; stroke:#333; stroke-width:1.5; }
+    .label { fill:#222; }
+    .link { stroke:#333; stroke-width:1.5; fill:none; marker-end:url(#arrow2); }
+    .power { stroke:#b00020; }
+    .data { stroke:#0b5fa5; }
+    .linklabel { fill:#444; font-size:11px; }
+  </style>
+
+  <rect class="box" x="20" y="150" width="170" height="110" rx="6"/>
+  <text class="label" x="35" y="180" font-weight="bold">Companion computer</text>
+  <text class="label" x="35" y="200">(e.g. Manifold 3,</text>
+  <text class="label" x="35" y="216">Jetson, RPi + TTL)</text>
+
+  <rect class="box" x="280" y="20" width="170" height="80" rx="6"/>
+  <text class="label" x="300" y="50" font-weight="bold">Aircraft E-Port /</text>
+  <text class="label" x="300" y="68">SkyPort V2 / X-Port</text>
+  <text class="label" x="300" y="86">(power + UART + USB)</text>
+
+  <rect class="box" x="280" y="150" width="170" height="80" rx="6"/>
+  <text class="label" x="300" y="180" font-weight="bold">DJI Authentication</text>
+  <text class="label" x="300" y="198">Chip (required for</text>
+  <text class="label" x="300" y="214">3rd-party E-Port payload)</text>
+
+  <rect class="box" x="280" y="280" width="170" height="80" rx="6"/>
+  <text class="label" x="300" y="310" font-weight="bold">Release servo</text>
+  <text class="label" x="300" y="328">signal (PWM) + power</text>
+  <text class="label" x="300" y="344">via companion computer GPIO</text>
+
+  <rect class="box" x="550" y="20" width="170" height="60" rx="6"/>
+  <text class="label" x="570" y="45" font-weight="bold">Power rails</text>
+  <text class="label" x="570" y="62">13.6V / 17V / 24V</text>
+
+  <rect class="box" x="550" y="150" width="170" height="60" rx="6"/>
+  <text class="label" x="570" y="175" font-weight="bold">PPS sync line</text>
+  <text class="label" x="570" y="192">M300 pin A5 (if available)</text>
+
+  <line class="link power" x1="190" y1="180" x2="278" y2="60"/>
+  <text class="linklabel" x="195" y="130">power</text>
+
+  <line class="link data" x1="190" y1="195" x2="278" y2="195"/>
+  <text class="linklabel" x="195" y="240">UART (control/telemetry/widgets)</text>
+
+  <line class="link data" x1="190" y1="210" x2="278" y2="270"/>
+
+  <line class="link power" x1="450" y1="50" x2="548" y2="50"/>
+  <line class="link data" x1="450" y1="180" x2="548" y2="180"/>
+
+  <line class="link power" x1="190" y1="230" x2="278" y2="320"/>
+  <text class="linklabel" x="195" y="270">servo power (regulated from companion computer rail)</text>
+
+  <line class="link data" x1="450" y1="130" x2="190" y2="200" stroke-dasharray="4,3"/>
+  <text class="linklabel" x="460" y="140">PPS edge -&gt; companion computer GPIO IRQ</text>
+
+  <text x="20" y="400" font-weight="bold">Red-cable / dot-mark orientation warning (SkyPort V2):</text>
+  <text x="20" y="416">align the red cable / dot mark on both connector halves before mating -- reversed connection can damage the port.</text>
+</svg>

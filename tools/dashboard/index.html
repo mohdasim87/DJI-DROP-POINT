@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  tools/dashboard — local web dashboard for bench and calibration work
+  (spec section 11). Plain HTML and vanilla JS, no build step, no CDN, so it
+  works with no internet on the aircraft's companion computer.
+
+  Development tool only. Never presented as a flight interface (spec 11)
+  -- the actual flight interface is DJI Pilot 2's widgets/floating
+  window/audio/liveview marker, per hard constraint 1.
+
+  Status: unverified -- requires a running droppoint instance exposing the
+  telemetry/solution feed this page polls. The wire format below
+  (GET /api/state, JSON) is a placeholder contract; app/ does not yet serve
+  it (see the note at the bottom of this file).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DropPoint Bench Dashboard</title>
+<style>
+  body { font-family: monospace; background: #111; color: #ddd; margin: 0; padding: 1rem; }
+  h1 { font-size: 1rem; color: #9fd; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel { border: 1px solid #444; padding: 0.75rem; border-radius: 4px; background: #1a1a1a; }
+  canvas { background: #000; border: 1px solid #333; }
+  .warn { color: #fc5; }
+  .bad { color: #f66; }
+  .ok { color: #7d7; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 2px 6px; border-bottom: 1px solid #333; }
+</style>
+</head>
+<body>
+<h1>DropPoint Bench Dashboard (development tool only -- not a flight interface)</h1>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Top-down plot</h2>
+    <canvas id="plot" width="480" height="480"></canvas>
+    <p>Release point (blue), latched target (red), predicted impact (green), dispersion cloud (grey dots)</p>
+  </div>
+
+  <div class="panel">
+    <h2>Live telemetry / solution</h2>
+    <table id="telemetry-table"><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <h2>Simulator controls</h2>
+    <label>Scenario:
+      <select id="scenario-select">
+        <option>hover</option>
+        <option>run-in</option>
+        <option>crosswind-3ms</option>
+        <option>crosswind-5ms</option>
+        <option>crosswind-8ms</option>
+        <option>gusty-wind</option>
+        <option>wind-shear</option>
+        <option>sloping-terrain</option>
+        <option>gnss-degradation</option>
+        <option>rtk-loss</option>
+        <option>telemetry-dropout</option>
+        <option>gimbal-slew</option>
+        <option>mis-designated-target</option>
+      </select>
+    </label>
+    <button id="connect-btn">Connect</button>
+    <p id="status" class="warn">Not connected.</p>
+  </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

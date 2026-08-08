@@ -1,0 +1,51 @@
+# config/aircraft.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER. Values below are representative for an
+# M300 RTK + H20T but have not been measured on a real aircraft. The
+# software announces this via the first-boot self-test (spec 15.3) until a
+# human confirms/updates it.
+#
+# See docs/PSDK-RESEARCH.md and docs/OPEN-QUESTIONS.md before changing
+# gimbal_yaw_source, psdk_link_mode, or baud_rate — these are constrained by
+# what the real PSDK headers and target aircraft actually support.
+
+model: "M300_RTK"
+
+# Used only by core::wind::EstimateFromHover (the *only* wind source this
+# system has, since no PSDK wind topic exists — docs/OPEN-QUESTIONS.md #2).
+cda_airframe: 0.45     # m^2, UNCALIBRATED PLACEHOLDER
+mass_kg: 6.3           # kg, without payload, UNCALIBRATED PLACEHOLDER
+
+# "independent": M300/M350 with H20/H30 series and M30T have independently
+#   controllable gimbal pan — read gimbal yaw directly.
+# "equals_aircraft_yaw": Mavic 3E/3T and Matrice 4T do not; gimbal yaw
+#   equals aircraft yaw. (spec section 3.4)
+gimbal_yaw_source: "independent"
+
+rangefinder_present: true
+rtk_required: true
+
+# one of: only_uart, uart_and_usb_bulk, uart_and_network, only_usb_bulk,
+# only_network — see docs/PSDK-RESEARCH.md section 8 for the exact macros
+# this maps to. Support varies by aircraft; detected/reported at startup.
+psdk_link_mode: "uart_and_usb_bulk"
+
+# M350 RTK and M30/30T accept 115200/230400/460800/921600/1000000.
+# Mavic 3E/3T supports 921600 only (see docs/OPEN-QUESTIONS.md #6).
+baud_rate: 921600
+
+# M300 exposes a PPS signal on pin A5 (spec 5.5). Set true only after
+# physically wiring it and confirming with `droppoint --selftest`.
+pps_available: false
+
+# RC channel/switch positions mapped to ARM/RELEASE/ABORT/SET TARGET, etc.
+# PSDK has no native button-binding API (docs/OPEN-QUESTIONS.md #3); these
+# map specific RC_WITH_FLAG_DATA channel values, configured in DJI Pilot's
+# own RC customization screen, to the logical buttons below.
+rc_button_map:
+  arm: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  release: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  abort: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  set_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  confirm_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  clear_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"

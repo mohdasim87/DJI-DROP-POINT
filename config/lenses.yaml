@@ -1,0 +1,31 @@
+# config/lenses.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER. HFOV/VFOV below are DATASHEET values,
+# not measured — spec section 6.7 explicitly warns datasheets often quote
+# diagonal FOV, which is metres of ground error if used as-is. Run
+# tools/lenscal's manual-entry mode (or an external OpenCV checkerboard
+# calibration, see docs/CALIBRATION.md) before flying a real mission, and
+# fill in calibration_date once done.
+
+lenses:
+  - aircraft_model: "M300_RTK"
+    stream_source: "H20T_wide"
+    camera_index: 0
+    image_width_px: 1920
+    image_height_px: 1080
+    hfov_deg: 82.9      # DATASHEET VALUE, UNCALIBRATED
+    vfov_deg: 52.8      # DATASHEET VALUE, UNCALIBRATED
+    principal_point_x_px: 960
+    principal_point_y_px: 540
+    calibration_date: ""   # empty = uncalibrated placeholder
+
+  - aircraft_model: "M300_RTK"
+    stream_source: "H20T_zoom"
+    camera_index: 1
+    image_width_px: 1920
+    image_height_px: 1080
+    hfov_deg: 22.5      # DATASHEET VALUE at minimum zoom, UNCALIBRATED
+    vfov_deg: 13.4
+    principal_point_x_px: 960
+    principal_point_y_px: 540
+    calibration_date: ""

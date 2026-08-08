@@ -1,0 +1,35 @@
+# config/system.yaml
+#
+# Gate thresholds, loop rates, Monte Carlo settings, video-telemetry offset,
+# log paths, DEM directory, units, and auto-mode limits (spec section 10).
+# All values here are defaults matching the numbers cited in the build spec
+# itself (sections 6-8); tune per-site/per-aircraft as needed, never in code.
+
+guidance_loop_hz: 10.0
+floating_window_hz: 2.0
+
+monte_carlo_samples: 200
+monte_carlo_min_rate_hz: 1.0   # if 200 samples/cycle is too expensive on target hardware,
+                                # reduce this rate rather than the sample count (spec 6.6)
+
+# Status: UNCALIBRATED PLACEHOLDER. Sweep this with the calibration mode
+# described in docs/CALIBRATION.md until the video marker stops sliding
+# during a yaw.
+video_telemetry_offset_ms: 40.0
+
+log_directory: "/var/log/droppoint"
+dem_directory: "/opt/droppoint/data/dem"
+units: "metric"
+
+auto_mode_max_solution_divergence_m: 25.0
+
+gates:
+  target_max_age_s: 120.0
+  depression_warn_deg: 30.0
+  depression_refuse_deg: 15.0
+  nominal_max_agl_m: 90.0
+  min_gnss_satellites: 12
+  max_telemetry_age_s: 0.400
+  max_acceleration_mps2: 0.5
+  max_solution_divergence_m: 25.0
+  gust_sigma_warn_mps: 2.0

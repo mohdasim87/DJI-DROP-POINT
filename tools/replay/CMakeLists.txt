@@ -1,0 +1,2 @@
+add_executable(droppoint_replay main.cpp)
+target_link_libraries(droppoint_replay PRIVATE droppoint_core droppoint_util)

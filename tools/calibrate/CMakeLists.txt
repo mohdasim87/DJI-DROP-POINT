@@ -1,0 +1,2 @@
+add_executable(droppoint_calibrate main.cpp)
+target_link_libraries(droppoint_calibrate PRIVATE droppoint_core droppoint_util)

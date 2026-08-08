@@ -1,0 +1,13 @@
+build/
+build-*/
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+.vs/
+.vscode/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+config/credentials.yaml
