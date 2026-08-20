@@ -6,6 +6,7 @@ add_library(droppoint_app STATIC
     mission_state.cpp
     release_manager.cpp
     guidance_loop.cpp
+    crosshair_target_source.cpp
 )
 target_include_directories(droppoint_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(droppoint_app PUBLIC cxx_std_17)

@@ -51,4 +51,7 @@ struct RaycastInputs {
 // and intersects it with the terrain (DEM + optional LRF-corrected bias).
 RaycastResult CastPixelToGround(const RaycastInputs& in);
 
+// Human-readable name for a RaycastFailure, surfaced in UI/logs.
+const char* FailureToString(RaycastFailure failure);
+
 }  // namespace droppoint::core::raycast

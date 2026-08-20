@@ -204,3 +204,75 @@ hardware, which has not been measured.
 (RC switch flip to servo returning to safe state) and confirm it is
 acceptable for the mission profile; tune the guidance loop's telemetry
 polling rate if not.
+
+---
+
+## 8. NED-to-ENU quaternion / gimbal-angle conversion signs
+
+`src/psdk/psdk_util.h` converts PSDK's body-FRD-to-NED quaternion into DropPoint's
+ENU Euler angles (Z-Y-X Tait-Bryan) and converts the PSDK gimbal-angle topic
+(degrees, x=pitch, y=roll, z=yaw, NED frame) into the same ENU convention.
+The transformation matrices are derived by coordinate similarity, but no
+real-flight data is available to verify that the sign of yaw, pitch, and roll
+matches the aircraft/gimbal physical behaviour. An error here would rotate the
+raycast ray incorrectly and produce wrong ground points, especially at long
+slant ranges.
+
+**Question for a human on real hardware:** With the aircraft on the ground and
+the gimbal nadir, confirm the converted ENU Euler angles are zero/level. Then
+with the aircraft yawed 90° right (clockwise when viewed from above), confirm
+`AircraftState.yaw_rad` increases (ENU convention: 0 = East, positive
+counter-clockwise). With the gimbal pitched 45° down, confirm
+`GimbalState.pitch_rad` is approximately -0.785 rad.
+
+---
+
+## 9. Rangefinder altitude and distance units
+
+`T_DjiCameraManagerLaserRangingInfo` declares `altitude` and `distance` as
+`int32_t`, but the header comment does not state the scaling factor. The
+`src/psdk/rangefinder_camera_manager.cpp` adapter currently multiplies by 0.1
+(tenths of a metre) because that is a common DJI fixed-point convention, but
+this is an assumption.
+
+**Question for a human on real hardware:** Capture a set of
+`DjiCameraManager_GetLaserRangingInfo` readings at known slant ranges and
+compare `info.distance`/`info.altitude` to the truth to determine the exact
+unit. If the scaling differs from 0.1, update
+`RangefinderCameraManager::GetLatestReading()` and the documentation.
+
+---
+
+## 10. Audio TTS trigger mechanism
+
+The PSDK widget speaker model registers a handler (`DjiWidget_RegSpeakerHandler`)
+through which Pilot sends audio data. There is no obvious public function to
+pass a text string to Pilot and have it synthesize speech. The current
+`AudioSpeaker::Speak()` therefore only logs the phrase and tracks a busy flag;
+real countdown audio would need either a local companion-computer audio output
+or a deeper understanding of how Pilot triggers TTS for a registered speaker.
+
+**Question for a human with DJI support / hardware:** Confirm how a PSDK app
+initiates spoken countdown phrases. If the companion computer must drive its
+own speaker, document the required audio hardware and update
+`src/psdk/audio_speaker.cpp` to play the buffered TTS data or a pre-rendered
+countdown clip.
+
+---
+
+## 11. Widget UI configuration / action buttons
+
+`DjiWidget_RegDefaultUiConfigByDirPath` and `T_DjiWidgetHandlerListItem` allow
+a PSDK app to expose buttons, switches, scales, lists, and int-input boxes in
+DJI Pilot 2. The current DropPoint build only uses the floating window
+(`DjiWidgetFloatingWindow_ShowMessage`) and the speaker handler; it does not
+register a widget configuration file, so the operator cannot yet press virtual
+ARM/RELEASE/ABORT buttons in Pilot. This is a gap relative to spec section 9
+(widget action-bar limit of 8 widgets).
+
+**Question for a human with hardware:** Produce or obtain the DJI widget
+configuration binary files for the target screen size/language and wire them
+in via `DjiWidget_RegDefaultUiConfigByDirPath` in `main_psdk.cpp`. Map the
+button indices to the `CycleInputs` fields (set_target, confirm_target, arm,
+release, abort) so the app can be fully controlled from Pilot as well as from
+RC switches.

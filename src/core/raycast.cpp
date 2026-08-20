@@ -195,4 +195,14 @@ RaycastResult CastPixelToGround(const RaycastInputs& in) {
     return result;
 }
 
+const char* FailureToString(RaycastFailure failure) {
+    switch (failure) {
+        case RaycastFailure::kNone: return "none";
+        case RaycastFailure::kRayAboveHorizon: return "ray above horizon";
+        case RaycastFailure::kNoDemTile: return "no DEM tile";
+        case RaycastFailure::kNoTerrainIntersection: return "no terrain intersection";
+    }
+    return "unknown";
+}
+
 }  // namespace droppoint::core::raycast
