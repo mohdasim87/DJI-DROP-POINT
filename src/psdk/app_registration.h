@@ -1,12 +1,12 @@
 // psdk/app_registration.h
 //
-// Status: unverified — requires hardware and a registered DJI developer
-// application.
+// Status: credential loader implemented and tested; DjiCore_Init wiring
+// requires real hardware and the vendored Payload-SDK.
 //
 // Wires config/credentials.yaml into the T_DjiUserInfo struct
-// (docs/PSDK-RESEARCH.md section 2) and calls DjiCore_Init. Every field
-// here is a credential slot: this file must never contain a real appKey,
-// appLicense, or developerAccount value (hard constraint 3).
+// (docs/PSDK-RESEARCH.md section 2). Every field here is a credential slot:
+// this file must never contain a real appKey, appLicense, or developerAccount
+// value (hard constraint 3).
 #pragma once
 
 #include <string>

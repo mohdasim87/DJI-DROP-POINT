@@ -29,7 +29,7 @@ comment.
 | File | HAL interface | PSDK surface used | Status |
 |---|---|---|---|
 | `release_gpio.{h,cpp}` | `hal::IRelease` | **not PSDK** — Linux sysfs PWM directly, see docs/OPEN-QUESTIONS.md #4 | Implemented; unverified without hardware |
-| `app_registration.h` | — | `T_DjiUserInfo` credential struct wiring, reads `config/credentials.yaml` | Implemented (loader); `DjiCore_Init` call is a documented TODO |
+| `app_registration.{h,cpp}` | — | `T_DjiUserInfo` credential struct wiring, reads `config/credentials.yaml` | Implemented (loader + tests); `DjiCore_Init` call is a documented TODO |
 | `telemetry_subscription.*` | `hal::ITelemetry` | `dji_fc_subscription.h` topics | **Not yet started** — tracked here, not stubbed |
 | `gimbal_psdk.*` | `hal::IGimbal` | `dji_gimbal_manager.h`, subscription `..._GIMBAL_ANGLES` | **Not yet started** |
 | `rangefinder_camera_manager.*` | `hal::IRangefinder` | `DjiCameraManager_GetLaserRangingInfo` | **Not yet started** |
@@ -40,9 +40,9 @@ comment.
 | Pilot Pin Point target source | `hal::ITargetSource` | **does not exist in public PSDK** | Not implementable, see docs/OPEN-QUESTIONS.md #1 |
 
 `release_gpio.*` needs no PSDK headers at all (docs/OPEN-QUESTIONS.md #4)
-and is the one PSDK-directory file that is directly testable on any Linux
-box with sysfs PWM permissions and a bench servo — it is implemented in
-full. The remaining `ITelemetry`/`IGimbal`/`IRangefinder`/`IDisplay`/
+and is directly testable on any Linux box with sysfs PWM permissions and a
+bench servo — it is implemented in full. `app_registration.cpp` is also
+buildable and tested on Windows (it only uses yaml-cpp and the filesystem). The remaining `ITelemetry`/`IGimbal`/`IRangefinder`/`IDisplay`/
 `IAudio`/`ILiveview` PSDK adapters follow directly from the API surface
 documented in `docs/PSDK-RESEARCH.md`, but writing and "testing" them
 against a static PSDK library with fabricated credentials would not
