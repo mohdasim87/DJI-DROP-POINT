@@ -268,7 +268,9 @@ int main(int argc, char** argv) {
                 break;
             }
         }
-        const std::string widget_dir = (fs::path(log_dir).parent_path() / "widget").string();
+        // Inside the (writable) log dir — the service user owns it, while its
+        // parent (e.g. /var/log) is root-owned.
+        const std::string widget_dir = (fs::path(log_dir) / "widget").string();
         bool widget_dir_ok = false;
         if (!icon_dir.empty()) {
             std::vector<std::string> payload_names;

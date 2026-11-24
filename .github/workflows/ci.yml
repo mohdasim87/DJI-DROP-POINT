@@ -95,6 +95,11 @@ jobs:
           git clone --depth 1 --branch 3.16.0 \
             https://github.com/dji-sdk/Payload-SDK third_party/psdk
 
+      # git describe refuses the container checkout ("dubious ownership")
+      # without this — the build version would fall back to "unknown".
+      - name: Allow git in container
+        run: git config --global --add safe.directory '*'
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDROPPOINT_BUILD_PSDK=ON
 
@@ -160,7 +165,23 @@ jobs:
                 cat /var/log/droppoint/selftest.txt ./data/logs/selftest.txt 2>/dev/null || true
                 exit 1
               }
-              /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config
+              # the service runs as user 'droppoint' — the selftest must pass
+              # without root, including writing the widget dir under the log dir
+              runuser -u droppoint -- /opt/droppoint/bin/droppoint \
+                --selftest --no-link --config /opt/droppoint/config | tee /tmp/st-$profile.log
+              test ${PIPESTATUS[0]} -eq 0 || {
+                echo '::error::non-root selftest failed — dumping report log'
+                cat /var/log/droppoint/selftest.txt 2>/dev/null || true
+                exit 1
+              }
+              grep -q '\[OK\] widget files generated' /tmp/st-$profile.log
+              /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config | tee /tmp/sim-$profile.log
+              test ${PIPESTATUS[0]} -eq 0
+              grep -Eq 'SUMMARY.*fired=1' /tmp/sim-$profile.log || {
+                echo '::error::hover sim did not fire for profile'
+                cat /tmp/sim-$profile.log
+                exit 1
+              }
               # upgrade-marker survival: site config edit, real credentials,
               # and the log dir must all survive a reinstall
               echo '# site edit marker' >> /opt/droppoint/config/payloads.yaml

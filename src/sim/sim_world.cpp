@@ -19,6 +19,7 @@ constexpr double kWindAlpha = 0.14;           // truth power-law exponent (open 
 SimWorld::SimWorld(ScenarioConfig config, std::uint64_t seed)
     : config_(config), rng_(seed), jitter_dist_(0.0, config.telemetry_jitter_ms * 1000.0) {
     heading_rad_ = config_.run_in_heading_deg * core::kPi / 180.0;
+    position_.u = config_.start_altitude_m;
 }
 
 void SimWorld::SetCommandedVelocity(const core::EnuVector& velocity_mps) {
@@ -86,7 +87,8 @@ std::optional<core::AircraftState> SimWorld::LatestTelemetry() const {
     const double vrel_sq = vrel_e * vrel_e + vrel_n * vrel_n;
     const double rho = core::atmosphere::DensityKgM3(
         core::atmosphere::PressurePa(position_.u + kOriginLla.alt_m_hae), 15.0);
-    const double airborne_mass_kg = config_.aircraft_mass_kg + config_.payload_mass_kg;
+    const double airborne_mass_kg =
+        config_.aircraft_mass_kg + config_.onboard_equipment_kg + config_.payload_mass_kg;
     const double theta =
         std::atan(rho * config_.cda_airframe * vrel_sq / (2.0 * airborne_mass_kg * core::ballistics::kGravity));
     const double from_bearing = core::geodesy::WrapAngleRad(std::atan2(-vrel_e, -vrel_n));

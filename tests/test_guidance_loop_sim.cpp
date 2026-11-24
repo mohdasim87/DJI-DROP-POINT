@@ -20,6 +20,7 @@
 #include "sim/sim_hal.h"
 #include "sim/sim_world.h"
 #include "test_framework.h"
+#include "util/config.h"
 
 using namespace droppoint;
 
@@ -56,7 +57,8 @@ bool SolutionHasNan(const core::Solution& s) {
 
 SimRunResult RunSimScenario(const sim::ScenarioConfig& scenario_cfg_in,
                             sim::ScriptedPilot::Plan plan, double seconds = 60.0,
-                            bool external_backend = false, bool hold_fire = false) {
+                            bool external_backend = false, bool hold_fire = false,
+                            const core::PayloadProfile* payload_override = nullptr) {
     sim::ScenarioConfig scenario_cfg = scenario_cfg_in;
     core::PayloadProfile payload;
     payload.name = "sim-medical-pack";
@@ -68,6 +70,7 @@ SimRunResult RunSimScenario(const sim::ScenarioConfig& scenario_cfg_in,
     payload.target_radius_m = 3.0;
     payload.mechanism_delay_s = 0.15;
     payload.calibrated = false;
+    if (payload_override != nullptr) payload = *payload_override;
     scenario_cfg.payload_mass_kg = payload.mass_kg;
 
     auto world = std::make_shared<sim::SimWorld>(scenario_cfg);
@@ -104,7 +107,9 @@ SimRunResult RunSimScenario(const sim::ScenarioConfig& scenario_cfg_in,
     config.wind_alpha = 0.14;
     config.min_run_in_speed_mps = 1.0;
     config.aircraft_mass_kg = scenario_cfg.aircraft_mass_kg;
-    config.wind.total_mass_kg = scenario_cfg.aircraft_mass_kg + payload.mass_kg;
+    config.onboard_equipment_kg = scenario_cfg.onboard_equipment_kg;
+    config.wind.total_mass_kg = scenario_cfg.aircraft_mass_kg +
+                                scenario_cfg.onboard_equipment_kg + payload.mass_kg;
     config.wind.cda_airframe = scenario_cfg.cda_airframe;
 
     app::GuidanceLoop loop(telemetry, gimbal, rangefinder, display, audio, liveview, release,
@@ -249,5 +254,36 @@ TEST_CASE("Sim: every scenario runs 60 s with no NaN and short floating text") {
         const auto r = RunSimScenario(cfg, plan);
         REQUIRE(!r.nan_seen);
         REQUIRE(!r.display_too_long);
+    }
+}
+
+TEST_CASE("Sim: hover drop fires once inside radius with each shipped profile") {
+    // The packaged install path: --sim hover --profile <dir> must be able to
+    // drop with the shipped M4T and M400 profiles. The profile supplies the
+    // aircraft mass, onboard equipment, CdA, payload and (external-operator)
+    // release backend; the scenario starts inside the payload's AGL envelope
+    // just as the sim driver now does.
+    for (const char* profile : {"profiles/m4t", "profiles/m400"}) {
+        const auto cfg_all = util::config::LoadAll(DROPPOINT_CONFIG_DIR +
+                                                 std::string("/") + profile);
+        sim::ScenarioConfig scenario_cfg = sim::ParseScenarioName("hover");
+        scenario_cfg.aircraft_mass_kg = cfg_all.aircraft.mass_kg;
+        scenario_cfg.onboard_equipment_kg = cfg_all.aircraft.onboard_equipment_kg;
+        scenario_cfg.cda_airframe = cfg_all.aircraft.cda_airframe;
+        const core::PayloadProfile& payload = cfg_all.payloads.front();
+        scenario_cfg.start_altitude_m =
+            0.5 * (payload.min_release_agl_m + payload.max_release_agl_m);
+
+        const auto r = RunSimScenario(
+            scenario_cfg, sim::ScriptedPilot::Plan::kHoverManual, /*seconds=*/60.0,
+            /*external_backend=*/
+            cfg_all.aircraft.release.backend ==
+                util::config::ReleaseBackend::kExternalOperator,
+            /*hold_fire=*/false, &payload);
+        REQUIRE(!r.nan_seen);
+        REQUIRE(r.saw_armed);
+        REQUIRE(r.fired_count == 1);
+        REQUIRE(r.truth_miss_m >= 0.0);
+        REQUIRE(r.truth_miss_m <= payload.target_radius_m);
     }
 }

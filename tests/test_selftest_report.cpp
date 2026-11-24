@@ -83,6 +83,20 @@ TEST_CASE("SelftestReport: missing or broken credentials FAIL") {
     REQUIRE(had_fail);
 }
 
+TEST_CASE("SelftestReport: weight margin nets out onboard equipment") {
+    // m4t: max 0.200 kg - onboard 0.110 kg = 0.090 kg releasable budget, so
+    // marker_light_40g -> 0.050 and med_pouch_80g -> 0.010, not 0.160/0.120.
+    const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m4t");
+    auto f = NoLinkFacts(cfg);
+    f.credentials_parsed = true;
+    bool had_fail = false;
+    const std::string r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(!had_fail);
+    REQUIRE(r.find("'marker_light_40g' weight margin 0.050 kg") != std::string::npos);
+    REQUIRE(r.find("'med_pouch_80g' weight margin 0.010 kg") != std::string::npos);
+    REQUIRE(r.find("0.160") == std::string::npos);
+}
+
 TEST_CASE("SelftestReport: fresh-install shape passes on both profiles") {
     for (const char* profile : {"profiles/m4t", "profiles/m400"}) {
         const auto cfg = config::LoadAll(ConfigRoot() + "/" + profile);

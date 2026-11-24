@@ -88,6 +88,10 @@ public:
 
     MissionState& Mission() { return mission_; }
 
+    // Gate evaluation from the most recent Tick â€” lets drivers surface the
+    // live hold reason (e.g. sim logs, dashboards) without scraping the HUD.
+    const core::gating::Evaluation& LastGates() const { return last_gates_; }
+
     // Live values the Pilot 2 widgets report back (read-only).
     int ActivePayloadIndex() const { return active_payload_index_; }
     double AmbientTemperatureC() const { return temperature_c_; }
@@ -120,7 +124,7 @@ private:
 
     core::PayloadProfile active_payload_;
     int active_payload_index_ = 0;
-    int surface_index_ = 1;  // kOpenCountry — matches the default wind_alpha
+    int surface_index_ = 1;  // kOpenCountry ï¿½ matches the default wind_alpha
     double temperature_c_ = 15.0;
 
     // Finite-difference acceleration estimate (EMA, tau 0.5 s) computed from
@@ -132,6 +136,7 @@ private:
 
     std::uint64_t last_monte_carlo_us_ = 0;
     core::DispersionResult last_dispersion_;
+    core::gating::Evaluation last_gates_{};
 
     // Floating-window rate limiting: floating_window_hz normally, up to
     // 5 Hz during COUNTDOWN, immediate on mission-state change.

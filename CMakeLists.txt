@@ -16,10 +16,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Version/build hash (spec 15.3: must appear in the startup log, self-test
-# report, and floating window on request). Falls back to "unknown" outside
-# a git checkout (e.g. a source tarball) rather than failing the build.
+# report, and floating window on request). Falls back to the project version
+# outside a git checkout (e.g. a source tarball, or a container where git
+# refuses the checkout's ownership) rather than failing the build.
 find_package(Git QUIET)
-set(DROPPOINT_BUILD_VERSION "unknown")
+set(DROPPOINT_BUILD_VERSION "${PROJECT_VERSION}")
 if(GIT_FOUND)
   execute_process(
     COMMAND ${GIT_EXECUTABLE} describe --always --dirty --tags
@@ -29,7 +30,7 @@ if(GIT_FOUND)
     ERROR_QUIET
   )
   if(DROPPOINT_BUILD_VERSION STREQUAL "")
-    set(DROPPOINT_BUILD_VERSION "unknown")
+    set(DROPPOINT_BUILD_VERSION "${PROJECT_VERSION}")
   endif()
 endif()
 configure_file(

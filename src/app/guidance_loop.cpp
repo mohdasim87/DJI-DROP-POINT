@@ -444,6 +444,7 @@ core::Solution GuidanceLoop::Tick(const CycleInputs& in) {
     thresholds.max_release_agl_m = active_payload_.max_release_agl_m;
     thresholds.rtk_required = config_.rtk_required;
     const core::gating::Evaluation gates = core::gating::Evaluate(gate_inputs, thresholds);
+    last_gates_ = gates;
 
     if (in.arm_pressed) {
         std::string reject_reason;

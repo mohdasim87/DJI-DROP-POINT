@@ -123,8 +123,14 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
     if (!profile_dir.empty()) {
         const auto cfg = util::config::LoadAll(profile_dir);
         scenario_cfg.aircraft_mass_kg = cfg.aircraft.mass_kg;
+        scenario_cfg.onboard_equipment_kg = cfg.aircraft.onboard_equipment_kg;
         scenario_cfg.cda_airframe = cfg.aircraft.cda_airframe;
         payload = cfg.payloads.front();
+        // Hover inside the payload's release-AGL envelope: on a real aircraft
+        // the operator would descend on the "DESCEND, ABOVE MAXIMUM RELEASE
+        // AGL" hold — altitude control isn't modelled, so start there.
+        scenario_cfg.start_altitude_m =
+            0.5 * (payload.min_release_agl_m + payload.max_release_agl_m);
         external_operator_backend =
             cfg.aircraft.release.backend == util::config::ReleaseBackend::kExternalOperator;
         release_hold_s = cfg.aircraft.release.hold_s;
@@ -171,8 +177,9 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
     config.min_run_in_speed_mps = 1.0;
     config.release_hold_s = release_hold_s;
     config.aircraft_mass_kg = scenario_cfg.aircraft_mass_kg;
-    config.onboard_equipment_kg = 0.0;
-    config.wind.total_mass_kg = scenario_cfg.aircraft_mass_kg + payload.mass_kg;
+    config.onboard_equipment_kg = scenario_cfg.onboard_equipment_kg;
+    config.wind.total_mass_kg = scenario_cfg.aircraft_mass_kg +
+                                scenario_cfg.onboard_equipment_kg + payload.mass_kg;
     config.wind.cda_airframe = scenario_cfg.cda_airframe;
 
     app::GuidanceLoop loop(telemetry, gimbal, rangefinder, display, audio, liveview, release,
@@ -187,6 +194,7 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
                             " starting simulator scenario: " + scenario_name);
 
     int fired_count = 0;
+    std::string last_hud;
     double predicted_miss_m = 0.0;
     core::EnuPoint aim_at_fire{};
     app::ReleaseMode mode_at_fire = app::ReleaseMode::kManual;
@@ -221,9 +229,12 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
         }
 
         if (step % 50 == 0) {
-            std::printf("[t=%.1fs] state=%d has_solution=%d miss=%.2fm hover=%d\n", step * kDt,
-                        static_cast<int>(loop.Mission().Id()), solution.has_solution,
-                        solution.miss_distance_m, solution.hover_mode ? 1 : 0);
+            const std::string& hold = loop.LastGates().primary_hold_reason;
+            std::printf("[t=%.1fs] state=%d has_solution=%d miss=%.2fm hover=%d hold='%s'\n",
+                        step * kDt, static_cast<int>(loop.Mission().Id()),
+                        solution.has_solution, solution.miss_distance_m,
+                        solution.hover_mode ? 1 : 0,
+                        hold.empty() ? "-" : hold.c_str());
             if (verbose) {
                 const auto ac = world->Position();
                 const auto vel = world->Velocity();
@@ -240,6 +251,10 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
                     display.LastMessage().c_str());
             }
         }
+        if (verbose && display.LastMessage() != last_hud) {
+            std::printf("    t=%.1f hud='%s'\n", step * kDt, display.LastMessage().c_str());
+            last_hud = display.LastMessage();
+        }
         if (verbose && release.GetState() == hal::ReleaseState::kFired && fired_count == 1) {
             const auto ac = world->Position();
             std::printf("    FIRE at t=%.1fs ac=(%.1f,%.1f) miss=%.2f\n", step * kDt, ac.e, ac.n,
@@ -254,10 +269,14 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
         std::snprintf(truth_buf, sizeof(truth_buf), "%.2fm", truth_miss_m);
     }
 
-    std::printf("SUMMARY scenario=%s fired=%d mode=%s predicted_miss=%.2fm truth_miss=%s\n",
-                scenario_name.c_str(), fired_count,
-                mode_at_fire == app::ReleaseMode::kAuto ? "auto" : "manual", predicted_miss_m,
-                truth_buf);
+    const std::string& last_hold = loop.LastGates().primary_hold_reason;
+    std::printf(
+        "SUMMARY scenario=%s fired=%d mode=%s backend=%s predicted_miss=%.2fm truth_miss=%s "
+        "hold='%s'\n",
+        scenario_name.c_str(), fired_count,
+        mode_at_fire == app::ReleaseMode::kAuto ? "auto" : "manual",
+        external_operator_backend ? "external_operator" : "sim", predicted_miss_m, truth_buf,
+        last_hold.empty() ? "-" : last_hold.c_str());
     return 0;
 }
 

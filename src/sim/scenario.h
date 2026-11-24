@@ -41,8 +41,14 @@ struct ScenarioConfig {
     // payload), so the driver must keep payload_mass_kg in sync with the
     // payload profile it hands the loop.
     double aircraft_mass_kg = 6.3;
+    double onboard_equipment_kg = 0.0;  // carried equipment — counts toward hover-tilt mass
     double payload_mass_kg = 1.5;
     double cda_airframe = 0.45;
+    // Altitude (ENU up, ~AGL over flat ground) the aircraft starts the
+    // scenario at — altitude control is not modelled, so this is also the
+    // release altitude. Drivers passing a profile should put it inside the
+    // payload's [min,max]_release_agl_m envelope so the AGL gates can pass.
+    double start_altitude_m = 60.0;
     // Height AGL the truth wind power law is referenced to, so the truth
     // profile and the estimator's model agree nominally (wind-shear stays
     // deliberately mismatched).

@@ -15,6 +15,12 @@ RestartSec=2
 WatchdogSec=5
 User=droppoint
 Group=droppoint
+# dialout for the /dev/tty* UART adapter; systemd creates /var/log/droppoint
+# (LogsDirectory) and /run/droppoint (RuntimeDirectory) owned by the service
+# user, so the app can write logs + widget files without root-created dirs.
+SupplementaryGroups=dialout
+LogsDirectory=droppoint
+RuntimeDirectory=droppoint
 StandardOutput=append:/var/log/droppoint/service.log
 StandardError=append:/var/log/droppoint/service.log
 

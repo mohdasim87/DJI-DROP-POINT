@@ -1,6 +1,7 @@
 // hw/selftest_report.cpp — see header.
 #include "selftest_report.h"
 
+#include <iomanip>
 #include <sstream>
 
 #include "hal/i_release.h"
@@ -68,14 +69,21 @@ std::string BuildSelftestReport(const SelftestFacts& in, bool* had_fail) {
             Line(os, "WARN", "payload '" + p.name +
                                  "' uncalibrated — ballistic constants are placeholders");
         }
-        const double margin = cfg.aircraft.max_payload_kg - p.mass_kg;
+        // max_payload_kg is the budget for EVERYTHING hanging off the aircraft
+        // — onboard equipment (companion computer, mounts, drop kit) plus the
+        // releasable payload itself.
+        const double margin =
+            cfg.aircraft.max_payload_kg - cfg.aircraft.onboard_equipment_kg - p.mass_kg;
+        std::ostringstream margin_ss;
+        margin_ss << std::fixed << std::setprecision(3) << margin;
         if (margin >= 0.0) {
-            Line(os, "OK", "payload '" + p.name + "' weight margin " +
-                               std::to_string(margin).substr(0, 5) + " kg under max " +
-                               std::to_string(cfg.aircraft.max_payload_kg) + " kg");
+            std::ostringstream max_ss;
+            max_ss << std::fixed << std::setprecision(3) << cfg.aircraft.max_payload_kg;
+            Line(os, "OK", "payload '" + p.name + "' weight margin " + margin_ss.str() +
+                               " kg under max " + max_ss.str() + " kg");
         } else {
-            Line(os, "FAIL", "payload '" + p.name + "' exceeds max_payload_kg by " +
-                                 std::to_string(-margin));
+            Line(os, "FAIL", "payload '" + p.name + "' exceeds the releasable budget by " +
+                                 margin_ss.str().substr(1) + " kg");
             fail = true;
         }
     }
