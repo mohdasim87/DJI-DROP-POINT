@@ -122,8 +122,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g' || true)"
-          VERSION="${VERSION:-0.2.0}"
+          BASE="$(sed -n 's/^project(droppoint VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          TAG="$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)"
+          # Debian versions must start with a digit: a bare commit hash does not.
+          VERSION="${TAG:-${BASE:-0.2.0}+g$(git rev-parse --short HEAD)}"
           echo "version=$VERSION"
           for profile in m4t m400; do
             bash scripts/package.sh "$profile" "$VERSION" build dist
@@ -133,8 +135,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g' || true)"
-          VERSION="${VERSION:-0.2.0}"
+          BASE="$(sed -n 's/^project(droppoint VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          TAG="$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)"
+          # Debian versions must start with a digit: a bare commit hash does not.
+          VERSION="${TAG:-${BASE:-0.2.0}+g$(git rev-parse --short HEAD)}"
           bash scripts/package_dpk.sh m400 build tests/data/credentials_test.yaml /tmp/dpk \
             third_party/psdk
           DPK="$(ls /tmp/dpk/DropPoint-M400_v*.dpk | head -1)"
