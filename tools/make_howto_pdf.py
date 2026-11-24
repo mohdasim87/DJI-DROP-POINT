@@ -20,14 +20,18 @@ import datetime
 import html
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import markdown
 from PIL import Image, ImageDraw, ImageFont
 
 REPO = Path(__file__).resolve().parent.parent
+SCRIPT_START = time.time()
 
 EDGE_CANDIDATES = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -106,12 +110,59 @@ def term_image(title: str, text: str, out: Path, max_rows: int = 40):
     img.save(out)
 
 
+def require_fresh(path: Path, label: str):
+    """A generated artifact must exist, be non-empty, and be newer than the
+    script start — a stale file from an earlier run must never pass."""
+    if not path.exists() or path.stat().st_size == 0:
+        sys.exit(f"error: {label} missing or empty: {path}")
+    if path.stat().st_mtime < SCRIPT_START - 1:
+        sys.exit(f"error: {label} is stale (not regenerated this run): {path}")
+
+
+def run_edge(edge: str, args: list, out: Path, label: str, timeout_s: int = 60):
+    """Run headless Edge and require a FRESH `out` file.
+
+    A dedicated throwaway --user-data-dir is mandatory: without it, when a
+    normal Edge session is already running, the headless launch just hands
+    the command line to that instance and exits having done nothing —
+    silently producing no screenshot/PDF."""
+    out = out.resolve()  # Chromium resolves --screenshot/--print-to-pdf
+                         # relative to its own cwd/profile, not ours
+    if out.exists():
+        out.unlink()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    profile = tempfile.mkdtemp(prefix="dp-edge-profile-")
+    cmd = [edge, "--headless=new", "--disable-gpu",
+           f"--user-data-dir={profile}",
+           "--no-first-run", "--disable-extensions"] + \
+          [str(a).replace("{OUT}", str(out)) for a in args]
+    print(f"  $ {' '.join(cmd)}")
+    t0 = time.time()
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=timeout_s)
+        rc, so, se = proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as e:
+        rc, so, se = -9, e.stdout or "", f"TIMEOUT after {timeout_s}s"
+    # the browser can return a hair before the file hits disk — poll briefly
+    deadline = t0 + 10
+    while time.time() < deadline and not (out.exists() and out.stat().st_size > 0):
+        time.sleep(0.25)
+    elapsed = time.time() - t0
+    print(f"    -> exit {rc}, {elapsed:.1f}s")
+    if not (out.exists() and out.stat().st_size > 0
+            and out.stat().st_mtime >= SCRIPT_START - 1):
+        sys.exit(f"error: Edge produced no fresh output for {label}\n"
+                 f"  out: {out}\n  exit={rc} after {elapsed:.1f}s\n"
+                 f"  stdout: {str(so).strip()}\n  stderr: {str(se).strip()}")
+    shutil.rmtree(profile, ignore_errors=True)
+
+
 def edge_shot(edge: str, url: str, out: Path, budget_ms: int = 20000):
-    run([edge, "--headless=new", "--disable-gpu",
-         f"--screenshot={out}", "--window-size=1600,1000",
-         f"--virtual-time-budget={budget_ms}", url], check=False)
-    if not out.exists() or out.stat().st_size < 5000:
-        sys.exit(f"error: Edge screenshot failed for {url} -> {out}")
+    run_edge(edge, ["--screenshot={OUT}", "--window-size=1600,1000",
+                    f"--virtual-time-budget={budget_ms}", url],
+             out, f"screenshot of {url}")
 
 
 def read(path: Path) -> str:
@@ -229,26 +280,28 @@ def hud_strings(build_dir: Path, sim_exe: Path) -> list:
 
 def make_hud_image(huds, shots: Path) -> Path:
     out = shots / "s9-floating-window.png"
-    box_w, box_h, gap = 480, 130, 18
-    cols = 3
+    box_w, gap = 740, 22
+    body = font("consola.ttf", 20)  # fits the longest real HUD line (55 ch)
+    line_h = 30
+    cols = 2
     rows = (len(huds) + cols - 1) // cols
+    box_h = 16 + line_h * 5
     W = 40 + cols * (box_w + gap)
-    H = 80 + rows * (box_h + gap)
+    H = 96 + rows * (box_h + gap)
     img = Image.new("RGB", (W, H), "#15181d")
     d = ImageDraw.Draw(img)
     d.text((24, 16), "Floating-window text — exactly as DropPoint sends it",
-           font=font("consolab.ttf", 24), fill="#e8e8e8")
-    d.text((24, 48), "captured from simulator runs (rendered here outside DJI Pilot 2)",
-           font=font("consola.ttf", 14), fill="#8b949e")
-    body = font("consola.ttf", 16)
+           font=font("consolab.ttf", 30), fill="#e8e8e8")
+    d.text((24, 54), "captured from simulator runs (rendered here outside DJI Pilot 2)",
+           font=font("consola.ttf", 17), fill="#8b949e")
     for i, s in enumerate(huds):
         col, row = i % cols, i // cols
         x = 20 + col * (box_w + gap)
-        y = 78 + row * (box_h + gap)
+        y = 90 + row * (box_h + gap)
         d.rounded_rectangle([x, y, x + box_w, y + box_h], radius=8,
                             fill="#3a3f45", outline="#6e7681", width=2)
         for j, ln in enumerate(s.split("\n")[:5]):
-            d.text((x + 14, y + 12 + j * 22), ln, font=body, fill="#e8e8e8")
+            d.text((x + 16, y + 10 + j * line_h), ln, font=body, fill="#e8e8e8")
     img.save(out)
     return out
 
@@ -461,8 +514,12 @@ def main() -> int:
                st_m400, shots / "s5b-selftest-m400.png")
 
     print("[4/9] ARM64 install transcripts (CI artifacts)")
+    transcript_build_ids = set()
     for profile in ("m4t", "m400"):
         log = Path(args.install_logs) / "install-logs" / f"install-{profile}.log"
+        m = re.search(r"droppoint\s+\S+\s+\(build\s+([^\s)]+)\)", read(log))
+        if m:
+            transcript_build_ids.add(m.group(1))
         install_part, upgrade_part = install_log_parts(log)
         term_image(f"arm64v8/ubuntu:20.04 — dpkg -i + --version + --selftest "
                    f"({profile})", install_part,
@@ -514,8 +571,9 @@ def main() -> int:
                  for k in ("install", "upgrade")])
     for name in required:
         p = shots / name
-        if not p.exists() or p.stat().st_size < 3000:
-            sys.exit(f"error: screenshot missing or suspiciously small: {p}")
+        require_fresh(p, f"screenshot {name}")
+        if p.stat().st_size < 3000:
+            sys.exit(f"error: screenshot suspiciously small: {p}")
 
     print("[8/9] assembling HTML")
     blocks = []
@@ -593,7 +651,8 @@ def main() -> int:
     SEC(f"""<h2>6 · Installing, step by step (real ARM64 transcript)</h2>
       <p>Every block below is a verbatim capture from the automated install
       test on a clean arm64 Ubuntu 20.04 container — the same steps you run
-      on the companion computer.</p>
+      on the companion computer. The transcripts below are from the package
+      built as <code>{html.escape(sorted(transcript_build_ids)[0] if transcript_build_ids else "unknown")}</code>.</p>
       <ol>
       <li><b>Install the package</b> — <code>dpkg -i droppoint-m4t_&lt;ver&gt;_arm64.deb</code>.
         postinst creates the <code>droppoint</code> system user, the log
@@ -697,7 +756,8 @@ def main() -> int:
             sys.exit(f"error: no checklist items found in {rel}")
         return "".join(items)
 
-    SEC("""<h2>9 · Before first flight — verify on the aircraft</h2>
+    # flows onto the same page as the floating-window image when it fits
+    B("""<h2>9 · Before first flight — verify on the aircraft</h2>
       <p>Nothing in this package has run on an aircraft. Before relying on a
       drop, work through the merged checklist from both aircraft guides:</p>""")
     B(f"""<ul class="checklist">
@@ -718,18 +778,29 @@ def main() -> int:
                 f"{PAGINATE_JS}</body></html>")
     html_path = shots.parent / "howto.html"
     html_path.write_text(html_doc, encoding="utf-8")
+    require_fresh(html_path, "generated HTML")
 
     print("[9/9] printing to PDF via headless Edge")
-    run([edge, "--headless=new", "--disable-gpu",
-         f"--print-to-pdf={out_pdf}", "--no-pdf-header-footer",
-         "--virtual-time-budget=15000",
-         "file:///" + str(html_path.resolve()).replace("\\", "/")], check=False)
-    if not out_pdf.exists() or out_pdf.stat().st_size < 20000:
-        sys.exit(f"error: PDF not produced: {out_pdf}")
+    run_edge(edge,
+             ["--print-to-pdf={OUT}", "--no-pdf-header-footer",
+              "--virtual-time-budget=15000",
+              "file:///" + str(html_path.resolve()).replace("\\", "/")],
+             out_pdf, "print-to-pdf")
+    if out_pdf.stat().st_size < 20000:
+        sys.exit(f"error: PDF suspiciously small: {out_pdf}")
 
-    data = out_pdf.read_bytes()
-    pages_n = len(re.findall(rb"/Type\s*/Page[^s]", data))
-    print(f"DONE: {out_pdf} — {pages_n} pages, {out_pdf.stat().st_size} bytes")
+    # ---- self-check: the PDF text must carry this run's real numbers ------
+    import pymupdf
+    doc = pymupdf.open(str(out_pdf))
+    pdf_text = re.sub(r"\s+", " ", "".join(p.get_text() for p in doc))
+    for bid in sorted(transcript_build_ids):
+        if bid not in pdf_text:
+            sys.exit(f"error: transcript build id '{bid}' not found in PDF text "
+                     f"— the PDF was not regenerated from the new artifacts")
+    if f"{test_count} unit" not in pdf_text:
+        sys.exit(f"error: test count '{test_count}' not found in PDF text")
+    print(f"DONE: {out_pdf} — {doc.page_count} pages, "
+          f"{out_pdf.stat().st_size} bytes")
     return 0
 
 

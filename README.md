@@ -11,11 +11,16 @@ releases at the computed instant itself (auto mode, gated and abortable).
 Built for search-and-rescue and emergency supply delivery: medical packs,
 water, radios, flotation.
 
-**Status:** buildable and tested today with zero hardware (`core/`, `sim/`,
-`app/`, `tools/`). The PSDK-hardware half (`src/psdk/`) requires a DJI
-developer account, a registered application, and real hardware that were
-not available while building this — see `docs/OPEN-QUESTIONS.md` and
-`src/psdk/README.md` for exactly what remains and why.
+**Status: not flight-verified.** The guidance logic is unit tested and flown
+in simulation; the hardware binary builds and links against DJI's Payload SDK
+3.16.0 on Linux, and the ARM64 packages are installed, upgraded and removed
+on a clean machine in CI. Nothing has run on an aircraft — see
+`docs/OPEN-QUESTIONS.md` for what only hardware can settle.
+
+**Supported aircraft profiles:** DJI Matrice 4T (`config/profiles/m4t`) and
+DJI Matrice 400 (`config/profiles/m400`). Start with
+`docs/DropPoint-How-To.pdf`, then `docs/aircraft/M4T.md` or
+`docs/aircraft/M400.md`. Using a CZI drop kit: `docs/CZI-DROP-KITS.md`.
 
 ## Quick start (no hardware required)
 
@@ -53,6 +58,9 @@ droppoint/
 
 | Doc | What's in it |
 |---|---|
+| `docs/DropPoint-How-To.pdf` | Illustrated how-to: which package for which drone, install, self-test, simulator, operator controls |
+| `docs/aircraft/M4T.md`, `docs/aircraft/M400.md` | Per-aircraft hardware, weight budget, install and flying steps |
+| `docs/CZI-DROP-KITS.md` | Using CZI TH2 / FT4-P / TH4 drop kits and what DropPoint can and cannot trigger |
 | `docs/PSDK-RESEARCH.md` | Phase 0 findings from the real Payload-SDK headers/samples |
 | `docs/OPEN-QUESTIONS.md` | Everything Phase 0 couldn't resolve, with the exact question a human answers on hardware — **start here** |
 | `docs/ARCHITECTURE.md` | The core/hal/sim/psdk/app boundary and why it's shaped this way |

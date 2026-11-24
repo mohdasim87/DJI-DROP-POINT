@@ -102,13 +102,13 @@ On the companion computer, with no internet needed:
 sudo dpkg -i droppoint-m4t_<version>_arm64.deb
 sudo nano /etc/droppoint/credentials.yaml     # DJI app name, ID, key, licence, account
 sudo nano /opt/droppoint/config/aircraft.yaml # uart_device, onboard_equipment_kg, release
-droppoint --selftest --no-link --config /opt/droppoint/config
+sudo -u droppoint /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config
 sudo systemctl start droppoint
 ```
 
-Then, with the aircraft powered and connected: `droppoint --selftest`
-and read `/var/log/droppoint/selftest.txt`. Bind the payload once in DJI
-Assistant 2.
+Run the self-test as the `droppoint` service user, as shown. Then, with the
+aircraft powered and connected, run it again without `--no-link` and read
+`/var/log/droppoint/selftest.txt`. Bind the payload once in DJI Assistant 2.
 
 ## Flying a drop
 

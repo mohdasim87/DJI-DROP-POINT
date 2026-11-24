@@ -1,9 +1,11 @@
 # DropPoint on the DJI RC / Pilot 2 screen
 
-**Status: unverified — this is the intended interface based on the implemented
-PSDK widget/floating-window APIs. The exact layout depends on DJI Pilot 2
-and the widget configuration files that still need to be created (see
-`docs/OPEN-QUESTIONS.md` #11).**
+**Status: unverified — requires hardware.** This page predates the widget
+implementation and is partly out of date: where it says widgets are not yet
+registered, or that RC switches must be polled, that is no longer true. The
+current operator controls, the ten widgets and their RC button mapping are in
+`docs/DropPoint-How-To.pdf` (section 8) and the aircraft guides under
+`docs/aircraft/`.
 
 ## What the pilot sees
 

@@ -14,3 +14,4 @@ config/credentials.yaml
 third_party/
 dist/
 *.dpk
+docs/howto/howto.html
