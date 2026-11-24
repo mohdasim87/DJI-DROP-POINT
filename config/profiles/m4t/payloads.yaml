@@ -1,0 +1,34 @@
+# config/profiles/m4t/payloads.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER for every profile below. `calibrated:
+# false` and an empty `calibration_date` are load-bearing — the software
+# surfaces a soft gate ("PAYLOAD PROFILE UNCALIBRATED", spec section 7)
+# until `tools/calibrate` has processed at least five measured drops per
+# profile (spec section 11) and this file has been updated with the result.
+#
+# Note the tight mass budget: aircraft.yaml max_payload_kg is 0.200 kg and
+# onboard_equipment_kg is already 0.110 kg, so payload mass must stay
+# <= 0.090 kg. Load validation rejects anything heavier.
+
+payloads:
+  - name: "marker_light_40g"
+    mass_kg: 0.040
+    cda_free: 0.004          # UNCALIBRATED PLACEHOLDER, small taped marker light
+    min_release_agl_m: 10.0
+    max_release_agl_m: 60.0
+    crosswind_limit_mps: 6.0
+    target_radius_m: 3.0
+    mechanism_delay_s: 0.30  # UNCALIBRATED PLACEHOLDER, operator-actuated kit latency
+    calibrated: false
+    calibration_date: ""
+
+  - name: "med_pouch_80g"
+    mass_kg: 0.080
+    cda_free: 0.008          # UNCALIBRATED PLACEHOLDER, soft medical pouch
+    min_release_agl_m: 10.0
+    max_release_agl_m: 60.0
+    crosswind_limit_mps: 6.0
+    target_radius_m: 3.0
+    mechanism_delay_s: 0.30
+    calibrated: false
+    calibration_date: ""

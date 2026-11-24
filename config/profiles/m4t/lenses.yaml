@@ -1,0 +1,22 @@
+# config/profiles/m4t/lenses.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER. HFOV/VFOV below are DERIVED values,
+# not measured — spec section 6.7 explicitly warns datasheets often quote
+# diagonal FOV, which is metres of ground error if used as-is. Run
+# tools/lenscal's manual-entry mode (or an external OpenCV checkerboard
+# calibration, see docs/CALIBRATION.md) before flying a real mission, and
+# fill in calibration_date once done.
+
+lenses:
+  - aircraft_model: "M4T"
+    stream_source: "wide"
+    camera_index: 0
+    image_width_px: 1920
+    image_height_px: 1080
+    # Derived from datasheet DFOV 82 deg assuming a 4:3 sensor and a
+    # full-width 16:9 crop — UNCALIBRATED.
+    hfov_deg: 69.6
+    vfov_deg: 42.7
+    principal_point_x_px: 960
+    principal_point_y_px: 540
+    calibration_date: ""   # empty = uncalibrated placeholder

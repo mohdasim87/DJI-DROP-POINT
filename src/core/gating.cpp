@@ -61,6 +61,9 @@ Evaluation Evaluate(const Inputs& in, const Thresholds& th) {
     Add(eval, GateId::kNoTerrainElevation, GateSeverity::kHard, !in.terrain_elevation_available,
         "HOLD - NO TERRAIN ELEVATION AVAILABLE");
 
+    Add(eval, GateId::kNoWindEstimate, GateSeverity::kHard, !in.wind_valid,
+        "HOLD - NO WIND ESTIMATE, HOVER 5 S");
+
     Add(eval, GateId::kInverseSolverFailed, GateSeverity::kHard, !in.inverse_solver_converged,
         "HOLD - SOLVER DID NOT CONVERGE");
 
@@ -74,12 +77,28 @@ Evaluation Evaluate(const Inputs& in, const Thresholds& th) {
     Add(eval, GateId::kAglAboveNominal, GateSeverity::kSoft, in.agl_m > th.nominal_max_agl_m,
         "HIGH AGL - DISPERSION INCREASED");
 
+    Add(eval, GateId::kAglAboveMaximum, GateSeverity::kHard, in.agl_m > th.max_release_agl_m,
+        "HOLD - DESCEND, ABOVE MAXIMUM RELEASE AGL");
+
     Add(eval, GateId::kPayloadUncalibrated, GateSeverity::kSoft, !in.payload_calibrated,
         "PAYLOAD PROFILE UNCALIBRATED");
 
+    Add(eval, GateId::kWindModelUncalibrated, GateSeverity::kSoft, !in.wind_model_calibrated,
+        "WIND MODEL UNCALIBRATED");
+
+    const char* elevation_source_message = "TGT ELEV FROM DEM ONLY - RANGE THE TARGET FIRST";
+    switch (in.target_elevation_source) {
+        case ElevationSource::kHomeTiedDem:
+            elevation_source_message = "TGT ELEV DEM+HOME TIE - NOT LASER RANGED";
+            break;
+        case ElevationSource::kFlatAtHome:
+            elevation_source_message = "FLAT TERRAIN ASSUMED - TGT ELEV = TAKEOFF ELEV";
+            break;
+        default:
+            break;
+    }
     Add(eval, GateId::kTargetElevationRawDem, GateSeverity::kSoft,
-        in.target_elevation_source != ElevationSource::kLrfCorrected,
-        "TGT ELEV FROM DEM ONLY - RANGE THE TARGET FIRST");
+        in.target_elevation_source != ElevationSource::kLrfCorrected, elevation_source_message);
 
     Add(eval, GateId::kNoDropPolygonViolation, GateSeverity::kHard,
         in.predicted_impact_in_no_drop_polygon, "ABORT - IMPACT INSIDE NO-DROP POLYGON");

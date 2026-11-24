@@ -67,8 +67,12 @@ ScenarioConfig ParseScenarioName(const std::string& name) {
         case ScenarioType::kRtkLoss:
             break;
         case ScenarioType::kTelemetryDropout:
-            cfg.dropout_start_s = 5.0;
-            cfg.dropout_duration_s = 1.0;
+            // Late enough that the scripted pilot is armed and on the
+            // run-in when the link drops (arm lands ~39 s, release ~42 s
+            // on the scripted timeline), and long enough that the abort
+            // cannot be outrun by the remaining flight time.
+            cfg.dropout_start_s = 39.5;
+            cfg.dropout_duration_s = 5.0;
             break;
         case ScenarioType::kGimbalSlew:
             break;

@@ -51,12 +51,22 @@ include(FetchContent)
 set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# yaml-cpp 0.8.0 declares cmake_minimum_required(VERSION 3.4), which CMake
+# 4.x rejects. Temporarily lower the policy floor around the FetchContent
+# call so the pinned tag configures unmodified.
+set(DROPPOINT_SAVED_POLICY_MIN ${CMAKE_POLICY_VERSION_MINIMUM})
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 FetchContent_Declare(
   yaml-cpp
   GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
   GIT_TAG        0.8.0
 )
 FetchContent_MakeAvailable(yaml-cpp)
+if(DROPPOINT_SAVED_POLICY_MIN)
+  set(CMAKE_POLICY_VERSION_MINIMUM ${DROPPOINT_SAVED_POLICY_MIN})
+else()
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
+endif()
 
 # ---------------------------------------------------------------------------
 # core: pure C++17, zero DJI/platform dependencies, fully unit-testable.

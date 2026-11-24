@@ -57,6 +57,35 @@ PsdkLinkMode ParseLinkMode(const std::string& s, const std::string& context) {
     throw ConfigError(context + ": unrecognised psdk_link_mode '" + s + "'");
 }
 
+PsdkPlatform ParsePsdkPlatform(const std::string& s, const std::string& context) {
+    if (s == "generic_linux") return PsdkPlatform::kGenericLinux;
+    if (s == "manifold3") return PsdkPlatform::kManifold3;
+    throw ConfigError(context + ": psdk_platform must be 'generic_linux' or 'manifold3', got '" + s + "'");
+}
+
+ReleaseBackend ParseReleaseBackend(const std::string& s, const std::string& context) {
+    if (s == "pwm_servo") return ReleaseBackend::kPwmServo;
+    if (s == "external_operator") return ReleaseBackend::kExternalOperator;
+    throw ConfigError(context +
+                      ": release.backend must be 'pwm_servo' or 'external_operator', got '" + s + "'");
+}
+
+DefaultReleaseMode ParseDefaultReleaseMode(const std::string& s, const std::string& context) {
+    if (s == "manual") return DefaultReleaseMode::kManual;
+    if (s == "auto") return DefaultReleaseMode::kAuto;
+    throw ConfigError(context + ": default_release_mode must be 'manual' or 'auto', got '" + s + "'");
+}
+
+// Aircraft models this build supports. Anything else is almost certainly a
+// typo that would silently load the wrong airframe parameters.
+const std::vector<std::string>& KnownModels() {
+    static const std::vector<std::string> models = {
+        "M300_RTK", "M350_RTK", "M30", "M30T", "M3E", "M3T",
+        "M4E",      "M4T",      "M4D", "M4TD", "M400",
+    };
+    return models;
+}
+
 }  // namespace
 
 AircraftConfig LoadAircraftConfig(const std::string& path) {
@@ -67,17 +96,54 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
     cfg.model = RequireField<std::string>(root, "model", ctx);
     cfg.cda_airframe = RequireField<double>(root, "cda_airframe", ctx);
     cfg.mass_kg = RequireField<double>(root, "mass_kg", ctx);
+    cfg.max_payload_kg = RequireField<double>(root, "max_payload_kg", ctx);
+    cfg.onboard_equipment_kg = OptionalField(root, "onboard_equipment_kg", 0.0);
+    cfg.airframe_calibrated = OptionalField(root, "airframe_calibrated", false);
     cfg.gimbal_yaw_source =
         ParseYawSource(RequireField<std::string>(root, "gimbal_yaw_source", ctx), ctx);
     cfg.rangefinder_present = OptionalField(root, "rangefinder_present", false);
     cfg.rtk_required = OptionalField(root, "rtk_required", false);
+    cfg.psdk_platform =
+        ParsePsdkPlatform(OptionalField<std::string>(root, "psdk_platform", "generic_linux"), ctx);
+    cfg.advanced_features = OptionalField(root, "advanced_features", false);
+    cfg.liveview_marker = OptionalField(root, "liveview_marker", false);
+    cfg.uart_device = OptionalField<std::string>(root, "uart_device", "/dev/ttyUSB0");
+    cfg.camera_mount_position = OptionalField(root, "camera_mount_position", 1);
     cfg.psdk_link_mode =
         ParseLinkMode(OptionalField<std::string>(root, "psdk_link_mode", "only_uart"), ctx);
     cfg.baud_rate = OptionalField(root, "baud_rate", 921600);
     cfg.pps_available = OptionalField(root, "pps_available", false);
 
+    if (root["release"]) {
+        const YAML::Node r = root["release"];
+        const std::string rctx = ctx + " (release)";
+        cfg.release.backend = ParseReleaseBackend(
+            OptionalField<std::string>(r, "backend", "pwm_servo"), rctx);
+        cfg.release.description = OptionalField<std::string>(r, "description", "");
+        cfg.release.hold_s = OptionalField(r, "hold_s", cfg.release.hold_s);
+        if (r["pwm"]) {
+            const YAML::Node pwm = r["pwm"];
+            cfg.release.pwm_chip_path = OptionalField<std::string>(pwm, "chip_path", cfg.release.pwm_chip_path);
+            cfg.release.pwm_channel = OptionalField(pwm, "channel", cfg.release.pwm_channel);
+            cfg.release.period_ns = OptionalField(pwm, "period_ns", cfg.release.period_ns);
+            cfg.release.safe_pulse_ns = OptionalField(pwm, "safe_pulse_ns", cfg.release.safe_pulse_ns);
+            cfg.release.release_pulse_ns = OptionalField(pwm, "release_pulse_ns", cfg.release.release_pulse_ns);
+        }
+    }
+
+    bool known_model = false;
+    for (const auto& m : KnownModels()) {
+        if (cfg.model == m) known_model = true;
+    }
+    if (!known_model) {
+        throw ConfigError(ctx + ": unknown model '" + cfg.model +
+                          "' (expected one of M300_RTK, M350_RTK, M30, M30T, M3E, M3T, M4E, M4T, "
+                          "M4D, M4TD, M400)");
+    }
     if (cfg.mass_kg <= 0.0) throw ConfigError(ctx + ": mass_kg must be positive");
     if (cfg.cda_airframe <= 0.0) throw ConfigError(ctx + ": cda_airframe must be positive");
+    if (cfg.max_payload_kg <= 0.0) throw ConfigError(ctx + ": max_payload_kg must be positive");
+    if (cfg.release.hold_s <= 0.0) throw ConfigError(ctx + ": release.hold_s must be positive");
     return cfg;
 }
 
@@ -109,6 +175,7 @@ std::vector<core::PayloadProfile> LoadPayloadsConfig(const std::string& path) {
 
         if (p.mass_kg <= 0.0) throw ConfigError(item_ctx + ": mass_kg must be positive");
         if (p.cda_free <= 0.0) throw ConfigError(item_ctx + ": cda_free must be positive");
+        if (p.target_radius_m <= 0.0) throw ConfigError(item_ctx + ": target_radius_m must be positive");
         if (p.cda_deployed.has_value() != p.deploy_delay_s.has_value()) {
             throw ConfigError(item_ctx + ": cda_deployed and deploy_delay_s must both be set or both omitted");
         }
@@ -188,6 +255,20 @@ SystemConfig LoadSystemConfig(const std::string& path) {
     cfg.units = OptionalField<std::string>(root, "units", cfg.units);
     cfg.auto_mode_max_solution_divergence_m =
         OptionalField(root, "auto_mode_max_solution_divergence_m", cfg.auto_mode_max_solution_divergence_m);
+    cfg.ambient_temperature_c = OptionalField(root, "ambient_temperature_c", cfg.ambient_temperature_c);
+    cfg.min_run_in_speed_mps = OptionalField(root, "min_run_in_speed_mps", cfg.min_run_in_speed_mps);
+    cfg.wind_alpha = OptionalField(root, "wind_alpha", cfg.wind_alpha);
+    cfg.allow_flat_terrain_fallback =
+        OptionalField(root, "allow_flat_terrain_fallback", cfg.allow_flat_terrain_fallback);
+    cfg.default_release_mode = ParseDefaultReleaseMode(
+        OptionalField<std::string>(root, "default_release_mode", "manual"), ctx);
+
+    if (root["wind"]) {
+        const YAML::Node w = root["wind"];
+        cfg.wind_window_s = OptionalField(w, "window_s", cfg.wind_window_s);
+        cfg.wind_min_hover_s = OptionalField(w, "min_hover_s", cfg.wind_min_hover_s);
+        cfg.wind_max_age_s = OptionalField(w, "max_age_s", cfg.wind_max_age_s);
+    }
 
     if (cfg.guidance_loop_hz <= 0.0) throw ConfigError(ctx + ": guidance_loop_hz must be positive");
     return cfg;
@@ -208,6 +289,27 @@ Config LoadAll(const std::string& config_dir) {
     if (!found_matching_lens) {
         throw ConfigError("lenses.yaml: no lens profile found for aircraft model '" + cfg.aircraft.model +
                            "' declared in aircraft.yaml");
+    }
+
+    // Cross-validation: every payload plus the fixed onboard equipment must
+    // fit inside the aircraft's declared releasable-weight limit.
+    for (const auto& p : cfg.payloads) {
+        if (p.mass_kg + cfg.aircraft.onboard_equipment_kg > cfg.aircraft.max_payload_kg) {
+            throw ConfigError("payloads.yaml: payload '" + p.name + "' (" +
+                              std::to_string(p.mass_kg) + " kg) + onboard_equipment_kg (" +
+                              std::to_string(cfg.aircraft.onboard_equipment_kg) +
+                              " kg) exceeds aircraft.yaml max_payload_kg (" +
+                              std::to_string(cfg.aircraft.max_payload_kg) + " kg)");
+        }
+    }
+
+    // AUTO as the default mode is meaningless when the release hardware can
+    // only be actuated by the operator in DJI Pilot.
+    if (cfg.system.default_release_mode == DefaultReleaseMode::kAuto &&
+        cfg.aircraft.release.backend == ReleaseBackend::kExternalOperator) {
+        throw ConfigError(
+            "system.yaml: default_release_mode 'auto' is incompatible with "
+            "aircraft.yaml release.backend 'external_operator'");
     }
     return cfg;
 }

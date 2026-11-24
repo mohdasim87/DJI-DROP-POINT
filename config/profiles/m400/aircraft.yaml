@@ -1,0 +1,84 @@
+# config/profiles/m400/aircraft.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER. Values below are representative for a
+# DJI Matrice 400 with an H30T gimbal, a Manifold 3 companion computer, and
+# a CZI TH4 V3 drop kit on SkyPort. They have not been measured on a real
+# aircraft — the software announces this via the first-boot self-test
+# (spec 15.3) until a human confirms/updates it.
+#
+# See docs/PSDK-RESEARCH.md and docs/OPEN-QUESTIONS.md before changing
+# gimbal_yaw_source, psdk_link_mode, or baud_rate — these are constrained by
+# what the real PSDK headers and target aircraft actually support.
+
+model: "M400"
+
+# Used only by core::wind::EstimateFromHover (the *only* wind source this
+# system has, since no PSDK wind topic exists — docs/OPEN-QUESTIONS.md #2).
+cda_airframe: 0.28     # m^2, UNCALIBRATED PLACEHOLDER for a ~10 kg quad
+mass_kg: 9.74          # kg, without payload (datasheet takeoff weight, single battery)
+airframe_calibrated: false   # set true only after measuring cda_airframe + mass on this airframe
+
+# M400 lift budget: payloads below plus the fixed onboard equipment must
+# fit inside this. Checked against payloads.yaml at load time.
+max_payload_kg: 6.0
+
+# H30T 0.92 + Manifold 3 0.12 + CZI TH4 0.32 + mounts — WEIGH YOUR BUILD
+onboard_equipment_kg: 1.55
+
+# M400 with an H30T has an independently controllable gimbal pan — read
+# gimbal yaw directly (spec section 3.4).
+gimbal_yaw_source: "independent"
+
+rangefinder_present: true
+rtk_required: false
+
+# "manifold3": Manifold 3 companion computer — USB-bulk link and DJI
+# advanced-permission features are available.
+psdk_platform: "manifold3"
+advanced_features: true    # camera/gimbal management, laser rangefinder, liveview overlay
+liveview_marker: false     # liveview impact markers — enable only once verified on this airframe
+uart_device: "/dev/ttyUSB0"
+camera_mount_position: 1   # PSDK mount position of the managed camera/gimbal
+
+# one of: only_uart, uart_and_usb_bulk, uart_and_network, only_usb_bulk,
+# only_network — see docs/PSDK-RESEARCH.md section 8 for the exact macros
+# this maps to. Support varies by aircraft; detected/reported at startup.
+psdk_link_mode: "only_usb_bulk"
+
+# M400 accepts 115200/230400/460800/921600/1000000 (UART kept for fallback).
+baud_rate: 921600
+
+# No PPS line is wired on this build.
+pps_available: false
+
+# The release hardware is a CZI TH4 V3 drop kit on SkyPort, operated by the
+# pilot in DJI Pilot 2. DropPoint cannot actuate it — it computes and
+# announces the release instant, and the floating window says "PRESS
+# RELEASE ON DROP KIT". Auto release is unavailable with this backend.
+release:
+  backend: "external_operator"
+  description: "CZI TH4 V3 (SkyPort, operated in DJI Pilot 2)"
+  hold_s: 1.5    # announcement/bookkeeping hold after the release instant
+
+  # Alternative: a locally-actuated PWM servo, if this build is ever wired
+  # for one instead of the CZI kit.
+  # backend: "pwm_servo"
+  # description: "PWM servo on the companion computer"
+  # pwm:
+  #   chip_path: "/sys/class/pwm/pwmchip0"
+  #   channel: 0
+  #   period_ns: 20000000        # 50 Hz
+  #   safe_pulse_ns: 1000000     # 1.0 ms
+  #   release_pulse_ns: 2000000  # 2.0 ms
+
+# RC channel/switch positions mapped to ARM/RELEASE/ABORT/SET TARGET, etc.
+# PSDK has no native button-binding API (docs/OPEN-QUESTIONS.md #3); these
+# map specific RC_WITH_FLAG_DATA channel values, configured in DJI Pilot's
+# own RC customization screen, to the logical buttons below.
+rc_button_map:
+  arm: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  release: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  abort: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  set_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  confirm_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  clear_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"

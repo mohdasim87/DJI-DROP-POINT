@@ -29,6 +29,20 @@ void MissionState::OnConfirmTarget(std::uint64_t now_us) {
     id_ = MissionStateId::kConfirmed;
 }
 
+bool MissionState::TrySetMode(ReleaseMode mode, bool auto_allowed, std::string* reject_reason) {
+    if (id_ == MissionStateId::kArmed || id_ == MissionStateId::kCountdown ||
+        id_ == MissionStateId::kReleased) {
+        if (reject_reason) *reject_reason = "cannot change release mode while armed";
+        return false;
+    }
+    if (mode == ReleaseMode::kAuto && !auto_allowed) {
+        if (reject_reason) *reject_reason = "AUTO UNAVAILABLE - RELEASE IS OPERATOR-ACTUATED";
+        return false;
+    }
+    mode_ = mode;
+    return true;
+}
+
 bool MissionState::TryArm(std::uint64_t now_us, bool gates_pass, std::string* reject_reason) {
     if (id_ != MissionStateId::kConfirmed) {
         if (reject_reason) *reject_reason = "no confirmed target";
@@ -44,26 +58,23 @@ bool MissionState::TryArm(std::uint64_t now_us, bool gates_pass, std::string* re
     return true;
 }
 
-void MissionState::Tick(std::uint64_t now_us, bool gates_pass, const std::string& trip_reason) {
-    if (id_ != MissionStateId::kArmed && id_ != MissionStateId::kCountdown) return;
-
-    if (!gates_pass) {
-        OnAbort(trip_reason.empty() ? "hard gate tripped" : trip_reason);
-        return;
-    }
-
-    if (id_ == MissionStateId::kArmed) {
-        const double idle_s = (now_us - last_activity_us_) / 1e6;
-        if (idle_s > kArmExpirySeconds) {
-            OnAbort("arm auto-expired after 60s idle");
-            return;
-        }
+void MissionState::Tick(std::uint64_t now_us) {
+    if (id_ != MissionStateId::kArmed) return;
+    const double idle_s = (now_us - last_activity_us_) / 1e6;
+    if (idle_s > kArmExpirySeconds) {
+        OnAbort("arm auto-expired after 60s idle");
     }
 }
 
 void MissionState::EnterCountdown() {
     if (id_ != MissionStateId::kArmed) return;
     id_ = MissionStateId::kCountdown;
+}
+
+void MissionState::ReturnToArmed(std::uint64_t now_us) {
+    if (id_ != MissionStateId::kCountdown) return;
+    id_ = MissionStateId::kArmed;
+    last_activity_us_ = now_us;
 }
 
 void MissionState::OnAbort(const std::string& reason) {

@@ -128,9 +128,15 @@ public:
     bool IsAvailable() const override { return true; }
     std::optional<hal::DesignationOutcome> TryDesignate(const hal::DesignationRequest& request) override;
 
+    // The point the crosshair raycast actually hit, before any scenario
+    // mis-designation offset is applied to the latched target — i.e. the
+    // point a correct operator intended to designate.
+    const std::optional<core::EnuPoint>& LastTrueHitEnu() const { return last_true_hit_; }
+
 private:
     std::shared_ptr<SimWorld> world_;
     core::projection::Intrinsics intrinsics_;
+    std::optional<core::EnuPoint> last_true_hit_;
 };
 
 }  // namespace droppoint::sim

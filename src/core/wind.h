@@ -30,9 +30,9 @@ EnuVector ToVector(double speed_mps, double from_bearing_rad);
 // gating on that precondition, but this computes the physics regardless:
 //   theta = sqrt(pitch^2 + roll^2)
 //   V_wind = sqrt( 2 * m_aircraft * g * tan(theta) / (rho * CdA_airframe) )
-// Bearing is the direction the aircraft tilts into (i.e. the direction the
-// nose-down/roll vector points), which is also the direction the wind blows
-// toward.
+// A hovering multirotor leans INTO the wind to hold position, so the lean
+// direction is the bearing the wind comes FROM — exactly the meteorological
+// "from" bearing WindSample carries.
 struct HoverEstimateInputs {
     double pitch_rad = 0.0;
     double roll_rad = 0.0;

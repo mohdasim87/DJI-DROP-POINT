@@ -30,17 +30,13 @@ std::uint64_t SimTelemetry::GetTelemetryAgeUs() {
 }
 
 core::WindSample SimTelemetry::GetWind() {
-    // No PSDK wind topic exists (docs/OPEN-QUESTIONS.md #2); the simulator
-    // mirrors that by only ever exposing the hover-estimate fallback,
-    // computed from the ground-truth wind rather than aircraft attitude
-    // (the sim's aircraft never actually tilts to hold position), which is
-    // sufficient to exercise the guidance loop's consumption of wind data.
+    // No PSDK wind topic exists (docs/OPEN-QUESTIONS.md #2): the simulator
+    // mirrors that exactly by reporting no usable wind sample, so the
+    // guidance loop must fall back to the hover-attitude estimator fed by
+    // the emulated tilt in LatestTelemetry().
     core::WindSample sample;
-    const core::EnuVector w = world_->WindAtHeight(std::max(0.5, last_valid_.position.u));
-    sample.speed_mps = std::sqrt(w.e * w.e + w.n * w.n);
-    sample.from_bearing_rad = core::geodesy::WrapAngleRad(std::atan2(-w.e, -w.n));
+    sample.valid = false;
     sample.from_telemetry_topic = false;
-    sample.valid = true;
     return sample;
 }
 
@@ -107,9 +103,18 @@ std::optional<hal::DesignationOutcome> SimCrosshairTargetSource::TryDesignate(
         return outcome;
     }
 
+    last_true_hit_ = result.point;
+
     outcome.succeeded = true;
     outcome.target.valid = true;
     outcome.target.enu = result.point;
+    if (world_->Config().type == ScenarioType::kMisdesignatedTarget) {
+        // The operator latched the wrong point: offset the designation
+        // while the scripted pilot still flies at the intended aimpoint,
+        // so the release corridor can never open for auto fire.
+        outcome.target.enu.e += world_->Config().misdesignated_offset_e_m;
+        outcome.target.enu.n += world_->Config().misdesignated_offset_n_m;
+    }
     outcome.target.geodetic = result.geodetic;
     outcome.target.elevation_source = result.elevation_source;
     outcome.target.depression_angle_rad = result.depression_angle_rad;

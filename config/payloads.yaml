@@ -18,9 +18,9 @@ payloads:
     calibrated: false
     calibration_date: ""
 
-  - name: "water_5l"
-    mass_kg: 5.2
-    cda_free: 0.045
+  - name: "water_1l"
+    mass_kg: 1.1
+    cda_free: 0.02
     min_release_agl_m: 15.0
     max_release_agl_m: 90.0
     crosswind_limit_mps: 8.0
@@ -42,8 +42,8 @@ payloads:
     calibrated: false
     calibration_date: ""
 
-  - name: "flotation_device_3kg"
-    mass_kg: 3.0
+  - name: "flotation_device_2kg"
+    mass_kg: 2.0
     cda_free: 0.15           # large flat cross-section, deliberately high drag
     min_release_agl_m: 10.0
     max_release_agl_m: 60.0

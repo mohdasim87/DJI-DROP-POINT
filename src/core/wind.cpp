@@ -65,20 +65,19 @@ WindSample EstimateFromHover(const HoverEstimateInputs& in) {
         2.0 * in.mass_kg * kGravity * tan_theta / (in.air_density_kg_m3 * in.cda_airframe);
     out.speed_mps = speed_sq > 0.0 ? std::sqrt(speed_sq) : 0.0;
 
-    // Direction the aircraft tilts into: pitch forward (nose down, positive
-    // pitch by convention) tilts into the aircraft heading; roll tilts
-    // laterally. Combine as a vector in the body frame then rotate to ENU by
-    // yaw. Wind blows TOWARD this direction (the tilt is the airframe
-    // leaning into the oncoming wind to hold position), so this bearing is
-    // directly usable as the "toward" bearing, and we store its reciprocal
-    // as the meteorological "from" bearing for consistency with the rest of
-    // the system.
+    // Direction the aircraft tilts, resolved in the body frame from the
+    // (pitch, roll) pair — convention per solution.h: pitch + = nose up,
+    // roll + = right wing down — then rotated into the ENU frame by yaw
+    // (ENU math angle: 0 = East, CCW positive). A hovering multirotor leans
+    // INTO the wind to hold position, so the lean direction is the bearing
+    // the wind comes FROM; the computation below lands directly on the
+    // meteorological "from" convention used throughout the system.
     const double tilt_dir_body = std::atan2(in.roll_rad, in.pitch_rad);
     const double toward_bearing_enu_math = in.yaw_rad + tilt_dir_body;
     // Convert math-convention (CCW from East) heading sum to compass bearing
     // (CW from North): compass = 90 - math, then add pi to get "from".
     const double toward_compass = geodesy::WrapAngleRad(kPi / 2.0 - toward_bearing_enu_math);
-    out.from_bearing_rad = geodesy::WrapAngleRad(toward_compass + kPi);
+    out.from_bearing_rad = geodesy::NormalizeCompassBearingRad(toward_compass + kPi);
     out.valid = true;
     return out;
 }

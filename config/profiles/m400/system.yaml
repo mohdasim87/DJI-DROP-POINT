@@ -1,0 +1,51 @@
+# config/profiles/m400/system.yaml
+#
+# Gate thresholds, loop rates, Monte Carlo settings, video-telemetry offset,
+# log paths, DEM directory, units, and auto-mode limits (spec section 10).
+# All values here are defaults matching the numbers cited in the build spec
+# itself (sections 6-8); tune per-site/per-aircraft as needed, never in code.
+
+guidance_loop_hz: 10.0
+floating_window_hz: 2.0
+
+monte_carlo_samples: 200
+monte_carlo_min_rate_hz: 1.0   # if 200 samples/cycle is too expensive on target hardware,
+                                # reduce this rate rather than the sample count (spec 6.6)
+
+# Status: UNCALIBRATED PLACEHOLDER. Sweep this with the calibration mode
+# described in docs/CALIBRATION.md until the video marker stops sliding
+# during a yaw.
+video_telemetry_offset_ms: 40.0
+
+log_directory: "/var/log/droppoint"
+dem_directory: "/opt/droppoint/data/dem"
+units: "metric"
+
+auto_mode_max_solution_divergence_m: 25.0
+
+ambient_temperature_c: 15.0   # used for the air-density model until/unless overridden at runtime
+min_run_in_speed_mps: 1.0     # below this ground speed the guidance loop is in hover-drop mode
+wind_alpha: 0.14              # power-law exponent for the wind profile (open country, spec 6.2)
+
+# Hover-attitude wind estimator (the only wind source — docs/OPEN-QUESTIONS.md #2).
+wind:
+  window_s: 10.0        # rolling averaging window
+  min_hover_s: 3.0      # minimum hover span inside the window before an estimate is valid
+  max_age_s: 300.0      # an estimate this old is treated as absent
+
+allow_flat_terrain_fallback: true   # permit ElevationSource::kFlatAtHome when no DEM data exists
+
+# The CZI TH4 kit is operator-actuated: "auto" here would be rejected at
+# load time, so the default must stay manual.
+default_release_mode: "manual"
+
+gates:
+  target_max_age_s: 120.0
+  depression_warn_deg: 30.0
+  depression_refuse_deg: 15.0
+  nominal_max_agl_m: 90.0
+  min_gnss_satellites: 12
+  max_telemetry_age_s: 0.400
+  max_acceleration_mps2: 0.5
+  max_solution_divergence_m: 25.0
+  gust_sigma_warn_mps: 2.0

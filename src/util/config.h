@@ -32,17 +32,46 @@ enum class PsdkLinkMode {
     kOnlyUsbBulk,
     kOnlyNetwork,
 };
+enum class PsdkPlatform { kGenericLinux, kManifold3 };
+enum class ReleaseBackend { kPwmServo, kExternalOperator };
+enum class DefaultReleaseMode { kManual, kAuto };
+
+// The `release:` map in aircraft.yaml: how the payload release mechanism is
+// driven. pwm_servo is a locally-actuated PWM output DropPoint controls;
+// external_operator is a third-party kit (e.g. CZI TH2/TH4) the operator
+// triggers in DJI Pilot — auto release is unavailable with that backend.
+struct ReleaseConfig {
+    ReleaseBackend backend = ReleaseBackend::kPwmServo;
+    std::string description;
+    double hold_s = 1.5;  // post-fire hold before the output is driven safe
+
+    // PWM servo parameters, under `release.pwm`.
+    std::string pwm_chip_path = "/sys/class/pwm/pwmchip0";
+    int pwm_channel = 0;
+    int period_ns = 20000000;
+    int safe_pulse_ns = 1000000;
+    int release_pulse_ns = 2000000;
+};
 
 struct AircraftConfig {
     std::string model;
     double cda_airframe = 0.0;
     double mass_kg = 0.0;
+    double max_payload_kg = 0.0;      // REQUIRED: max releasable weight carried, kg
+    double onboard_equipment_kg = 0.0;  // companion computer, mounts, drop kit, etc.
+    bool airframe_calibrated = false;
     GimbalYawSource gimbal_yaw_source = GimbalYawSource::kEqualsAircraftYaw;
     bool rangefinder_present = false;
     bool rtk_required = false;
+    PsdkPlatform psdk_platform = PsdkPlatform::kGenericLinux;
+    bool advanced_features = false;   // DJI advanced permission features available
+    bool liveview_marker = false;
+    std::string uart_device = "/dev/ttyUSB0";
+    int camera_mount_position = 1;
     PsdkLinkMode psdk_link_mode = PsdkLinkMode::kOnlyUart;
     int baud_rate = 921600;
     bool pps_available = false;
+    ReleaseConfig release;
 };
 
 struct LensProfile {
@@ -65,6 +94,14 @@ struct SystemConfig {
     std::string dem_directory = "/opt/droppoint/data/dem";
     std::string units = "metric";
     double auto_mode_max_solution_divergence_m = 25.0;
+    double ambient_temperature_c = 15.0;
+    double min_run_in_speed_mps = 1.0;
+    double wind_alpha = 0.14;               // power-law exponent, see core::wind
+    double wind_window_s = 10.0;            // `wind:` map: hover-estimator window
+    double wind_min_hover_s = 3.0;
+    double wind_max_age_s = 300.0;
+    bool allow_flat_terrain_fallback = true;
+    DefaultReleaseMode default_release_mode = DefaultReleaseMode::kManual;
 };
 
 struct Config {

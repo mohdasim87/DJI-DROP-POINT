@@ -33,6 +33,12 @@ public:
     // last command; false surfaces as a startup self-test failure per spec
     // 15.3.
     virtual bool IsResponding() = 0;
+
+    // True when the release hardware is a third-party kit the OPERATOR
+    // triggers (e.g. a CZI drop kit fired from DJI Pilot) rather than
+    // something DropPoint can actuate itself. Fire() on such a backend only
+    // records the intended instant; auto release is unavailable.
+    virtual bool IsOperatorActuated() const { return false; }
 };
 
 }  // namespace droppoint::hal

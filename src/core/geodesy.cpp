@@ -98,13 +98,19 @@ double BearingRad(const EnuPoint& a, const EnuPoint& b) {
     const double dn = b.n - a.n;
     // Compass bearing: 0 = North, clockwise positive. atan2 in ENU with
     // (East, North) args gives exactly that convention.
-    return std::atan2(de, dn);
+    return NormalizeCompassBearingRad(std::atan2(de, dn));
 }
 
 double WrapAngleRad(double angle_rad) {
     while (angle_rad > kPi) angle_rad -= 2.0 * kPi;
     while (angle_rad <= -kPi) angle_rad += 2.0 * kPi;
     return angle_rad;
+}
+
+double NormalizeCompassBearingRad(double bearing_rad) {
+    double b = std::fmod(bearing_rad, 2.0 * kPi);
+    if (b < 0.0) b += 2.0 * kPi;
+    return b;
 }
 
 }  // namespace droppoint::core::geodesy

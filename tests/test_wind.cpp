@@ -36,6 +36,63 @@ TEST_CASE("Wind: hover estimator produces a valid sample") {
     REQUIRE(s.speed_mps > 0.0);
 }
 
+TEST_CASE("Wind: hover estimator direction, north heading pitch-down means wind from north") {
+    // ENU-math yaw: north heading = pi/2. A lean into the wind (nose dips
+    // toward the wind source) reads as pitch < 0 with pitch + = nose up.
+    wind::HoverEstimateInputs in;
+    in.pitch_rad = -0.05;
+    in.roll_rad = 0.0;
+    in.yaw_rad = kPi / 2.0;  // heading north
+    in.mass_kg = 1.5;
+    in.cda_airframe = 0.3;
+    in.air_density_kg_m3 = 1.2;
+    const WindSample s = wind::EstimateFromHover(in);
+    REQUIRE(s.valid);
+    REQUIRE_NEAR(s.from_bearing_rad, 0.0, 1e-6);  // from north
+}
+
+TEST_CASE("Wind: hover estimator direction, right wing down means wind from east") {
+    wind::HoverEstimateInputs in;
+    in.pitch_rad = 0.0;
+    in.roll_rad = 0.05;
+    in.yaw_rad = kPi / 2.0;  // heading north; right wing down => leans east
+    in.mass_kg = 1.5;
+    in.cda_airframe = 0.3;
+    in.air_density_kg_m3 = 1.2;
+    const WindSample s = wind::EstimateFromHover(in);
+    REQUIRE(s.valid);
+    REQUIRE_NEAR(s.from_bearing_rad, kPi / 2.0, 1e-6);  // from east
+}
+
+TEST_CASE("Wind: hover estimator direction, east heading pitch-down means wind from east") {
+    wind::HoverEstimateInputs in;
+    in.pitch_rad = -0.05;
+    in.roll_rad = 0.0;
+    in.yaw_rad = 0.0;  // heading east (ENU math angle 0)
+    in.mass_kg = 1.5;
+    in.cda_airframe = 0.3;
+    in.air_density_kg_m3 = 1.2;
+    const WindSample s = wind::EstimateFromHover(in);
+    REQUIRE(s.valid);
+    REQUIRE_NEAR(s.from_bearing_rad, kPi / 2.0, 1e-6);  // from east
+}
+
+TEST_CASE("Wind: hover estimator speed matches the drag-balance formula") {
+    const double theta = 0.08;
+    wind::HoverEstimateInputs in;
+    in.pitch_rad = -theta;
+    in.roll_rad = 0.0;
+    in.yaw_rad = kPi / 2.0;
+    in.mass_kg = 6.3;
+    in.cda_airframe = 0.45;
+    in.air_density_kg_m3 = 1.2;
+    const WindSample s = wind::EstimateFromHover(in);
+    REQUIRE(s.valid);
+    const double expected =
+        std::sqrt(2.0 * in.mass_kg * 9.80665 * std::tan(theta) / (in.air_density_kg_m3 * in.cda_airframe));
+    REQUIRE_REL_NEAR(s.speed_mps, expected, 1e-9);
+}
+
 TEST_CASE("Wind: disagreement flags large speed differences") {
     WindSample telemetry;
     telemetry.valid = true;

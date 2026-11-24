@@ -1,0 +1,88 @@
+# config/profiles/m4t/aircraft.yaml
+#
+# Status: UNCALIBRATED PLACEHOLDER. Values below are representative for a
+# DJI Matrice 4T carrying a CZI TH2 drop kit, driven by a companion
+# computer over UART. They have not been measured on a real aircraft —
+# the software announces this via the first-boot self-test (spec 15.3)
+# until a human confirms/updates it.
+#
+# See docs/PSDK-RESEARCH.md and docs/OPEN-QUESTIONS.md before changing
+# gimbal_yaw_source, psdk_link_mode, or baud_rate — these are constrained by
+# what the real PSDK headers and target aircraft actually support.
+
+model: "M4T"
+
+# Used only by core::wind::EstimateFromHover (the *only* wind source this
+# system has, since no PSDK wind topic exists — docs/OPEN-QUESTIONS.md #2).
+cda_airframe: 0.035    # m^2, UNCALIBRATED PLACEHOLDER for a ~1.2 kg quad
+mass_kg: 1.219         # kg, without payload (datasheet takeoff weight)
+airframe_calibrated: false   # set true only after measuring cda_airframe + mass on this airframe
+
+# M4T lift budget is small: the CZI TH2 kit (~70 g) plus the payloads below
+# must all fit inside this. Every payload profile in payloads.yaml is
+# checked against it at load time.
+max_payload_kg: 0.200
+
+# companion computer + cabling ~40 g and CZI TH2 hook 70 g — WEIGH YOUR BUILD
+onboard_equipment_kg: 0.110
+
+# Mavic 3E/3T and Matrice 4 series have no independent gimbal pan: gimbal
+# yaw equals aircraft yaw (spec section 3.4).
+gimbal_yaw_source: "equals_aircraft_yaw"
+
+rangefinder_present: true
+rtk_required: false
+
+# "generic_linux": PSDK on a generic Linux port (UART link only).
+psdk_platform: "generic_linux"
+
+# Camera/gimbal management, laser rangefinder and liveview overlay need
+# Manifold 3 or DJI advanced permission — neither is available on this build.
+advanced_features: false
+liveview_marker: false
+uart_device: "/dev/ttyUSB0"
+camera_mount_position: 1
+
+# one of: only_uart, uart_and_usb_bulk, uart_and_network, only_usb_bulk,
+# only_network — see docs/PSDK-RESEARCH.md section 8 for the exact macros
+# this maps to. Support varies by aircraft; detected/reported at startup.
+psdk_link_mode: "only_uart"
+
+# M4-family UART link runs at 921600.
+baud_rate: 921600
+
+# No PPS line is wired on this build.
+pps_available: false
+
+# The release hardware is a CZI TH2 drop kit: triggered by the aircraft
+# auxiliary bottom light, operated by the pilot in DJI Pilot 2. DropPoint
+# cannot actuate it — it computes and announces the release instant, and
+# the floating window says "PRESS RELEASE ON DROP KIT". Auto release is
+# unavailable with this backend.
+release:
+  backend: "external_operator"
+  description: "CZI TH2 (triggered by the aircraft auxiliary bottom light, operated in DJI Pilot 2)"
+  hold_s: 1.5    # announcement/bookkeeping hold after the release instant
+
+  # Alternative: a locally-actuated PWM servo, if this build is ever wired
+  # for one instead of the CZI kit.
+  # backend: "pwm_servo"
+  # description: "PWM servo on the companion computer"
+  # pwm:
+  #   chip_path: "/sys/class/pwm/pwmchip0"
+  #   channel: 0
+  #   period_ns: 20000000        # 50 Hz
+  #   safe_pulse_ns: 1000000     # 1.0 ms
+  #   release_pulse_ns: 2000000  # 2.0 ms
+
+# RC channel/switch positions mapped to ARM/RELEASE/ABORT/SET TARGET, etc.
+# PSDK has no native button-binding API (docs/OPEN-QUESTIONS.md #3); these
+# map specific RC_WITH_FLAG_DATA channel values, configured in DJI Pilot's
+# own RC customization screen, to the logical buttons below.
+rc_button_map:
+  arm: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  release: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  abort: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  set_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  confirm_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"
+  clear_target: "UNCONFIGURED — see docs/OPEN-QUESTIONS.md #3"

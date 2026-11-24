@@ -31,10 +31,13 @@ enum class GateId {
     kSolutionDivergence,
     kGustSigmaHigh,
     kAglAboveNominal,
+    kAglAboveMaximum,
     kRtkFloat,
     kPayloadUncalibrated,
     kTargetElevationRawDem,
     kNoDropPolygonViolation,
+    kNoWindEstimate,
+    kWindModelUncalibrated,
 };
 
 enum class GateSeverity { kHard, kSoft };
@@ -54,6 +57,7 @@ struct Thresholds {
     double depression_refuse_rad = 15.0 * kPi / 180.0;
     double crosswind_limit_mps = 1e9;    // from payload profile
     double min_release_agl_m = 0.0;      // from payload profile
+    double max_release_agl_m = 1e9;      // from payload profile
     double nominal_max_agl_m = 90.0;
     int min_gnss_satellites = 12;
     bool rtk_required = false;
@@ -84,6 +88,8 @@ struct Inputs {
     bool payload_calibrated = true;
     ElevationSource target_elevation_source = ElevationSource::kLrfCorrected;
     bool predicted_impact_in_no_drop_polygon = false;
+    bool wind_valid = true;               // active wind source (telemetry topic or estimator) produced a sample
+    bool wind_model_calibrated = true;    // aircraft CdA/mass calibration state, soft gate
 };
 
 struct Evaluation {

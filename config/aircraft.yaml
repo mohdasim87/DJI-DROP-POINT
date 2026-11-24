@@ -15,6 +15,38 @@ model: "M300_RTK"
 # system has, since no PSDK wind topic exists — docs/OPEN-QUESTIONS.md #2).
 cda_airframe: 0.45     # m^2, UNCALIBRATED PLACEHOLDER
 mass_kg: 6.3           # kg, without payload, UNCALIBRATED PLACEHOLDER
+airframe_calibrated: false   # set true only after measuring cda_airframe + mass on this airframe
+
+# Maximum releasable weight the aircraft may carry (payload + fixed onboard
+# equipment below). Every payload profile in payloads.yaml is checked
+# against this at load time.
+max_payload_kg: 2.7    # H20T already occupies the gimbal port; this is the drop-kit budget
+onboard_equipment_kg: 0.0  # kg — WEIGH YOUR BUILD (companion computer, mounts, drop kit)
+
+# "generic_linux": PSDK on a generic Linux port (UART link only).
+# "manifold3": Manifold 3 companion computer (enables USB-bulk link and
+#   DJI advanced-permission features below).
+psdk_platform: "manifold3"
+advanced_features: true    # camera/gimbal management, laser rangefinder, liveview overlay
+liveview_marker: false     # liveview impact markers — enable only once verified on this airframe
+uart_device: "/dev/ttyUSB0"
+camera_mount_position: 1   # PSDK mount position of the managed camera/gimbal
+
+# How the payload release mechanism is driven.
+#   pwm_servo:         DropPoint actuates a servo via sysfs PWM itself.
+#   external_operator: third-party kit (e.g. CZI) the operator triggers in
+#                      DJI Pilot — DropPoint computes/announces the instant
+#                      only; auto release is unavailable.
+release:
+  backend: "pwm_servo"
+  description: "PWM servo on the companion computer"
+  hold_s: 1.5    # keep the fired output active this long so the hook can open
+  pwm:
+    chip_path: "/sys/class/pwm/pwmchip0"
+    channel: 0
+    period_ns: 20000000        # 50 Hz
+    safe_pulse_ns: 1000000     # 1.0 ms
+    release_pulse_ns: 2000000  # 2.0 ms
 
 # "independent": M300/M350 with H20/H30 series and M30T have independently
 #   controllable gimbal pan — read gimbal yaw directly.

@@ -42,9 +42,13 @@ LatLonAlt EnuToLla(const EnuPoint& enu, const EnuOrigin& origin);
 double HorizontalRange(const EnuPoint& a, const EnuPoint& b);
 // Bearing from a to b, radians, 0 = North, clockwise positive (compass
 // convention), matching floating-window and audio "come round to" cues.
+// Returned in [0, 2*pi).
 double BearingRad(const EnuPoint& a, const EnuPoint& b);
 
 // Normalises an angle to (-pi, pi].
 double WrapAngleRad(double angle_rad);
+
+// Normalises a compass bearing (0 = North, clockwise positive) to [0, 2*pi).
+double NormalizeCompassBearingRad(double bearing_rad);
 
 }  // namespace droppoint::core::geodesy

@@ -5,12 +5,17 @@
 // src/psdk instead (see src/psdk/README once PSDK credentials exist).
 #include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <memory>
 #include <string>
 #include <thread>
 
 #include "core/geodesy.h"
 #include "core/solution.h"
+#include "external_operator_release.h"
 #include "guidance_loop.h"
+#include "sim/scenario.h"
+#include "sim/scripted_pilot.h"
 #include "sim/sim_hal.h"
 #include "sim/sim_world.h"
 #include "util/config.h"
@@ -21,7 +26,8 @@ namespace {
 
 void PrintUsage() {
     std::printf(
-        "droppoint [--sim <scenario>] [--verbose] [--selftest] [--config <dir>] [--credentials <file>]\n"
+        "droppoint [--sim <scenario>] [--profile <dir>] [--verbose] [--selftest] "
+        "[--config <dir>] [--credentials <file>]\n"
         "  scenarios: hover, run-in, crosswind-3ms, crosswind-5ms, crosswind-8ms,\n"
         "             gusty-wind, wind-shear, sloping-terrain, gnss-degradation,\n"
         "             rtk-loss, telemetry-dropout, gimbal-slew, mis-designated-target\n"
@@ -33,6 +39,17 @@ void PrintUsage() {
         "  Status: unverified — the PSDK-backed checks require hardware; this build\n"
         "  only runs the checks that do not need PSDK (config load, DEM directory,\n"
         "  release GPIO responsiveness if --release-gpio-chip is given).\n");
+}
+
+const char* PlatformName(droppoint::util::config::PsdkPlatform platform) {
+    return platform == droppoint::util::config::PsdkPlatform::kManifold3 ? "manifold3"
+                                                                        : "generic_linux";
+}
+
+const char* BackendName(droppoint::util::config::ReleaseBackend backend) {
+    return backend == droppoint::util::config::ReleaseBackend::kExternalOperator
+               ? "external_operator"
+               : "pwm_servo";
 }
 
 // Status: partially unverified — requires hardware for the PSDK-backed
@@ -47,12 +64,27 @@ int RunSelfTest(const std::string& config_dir) {
         const auto cfg = droppoint::util::config::LoadAll(config_dir);
         std::printf("[OK]   config valid (aircraft=%s, %zu payload profile(s), %zu lens profile(s))\n",
                     cfg.aircraft.model.c_str(), cfg.payloads.size(), cfg.lenses.size());
+        std::printf("[INFO] aircraft model: %s\n", cfg.aircraft.model.c_str());
+        std::printf("[INFO] psdk platform: %s\n", PlatformName(cfg.aircraft.psdk_platform));
+        std::printf("[INFO] release backend: %s%s\n", BackendName(cfg.aircraft.release.backend),
+                    cfg.aircraft.release.description.empty()
+                        ? ""
+                        : (std::string(" — ") + cfg.aircraft.release.description).c_str());
+        std::printf("[INFO] max payload: %.3f kg (onboard equipment %.3f kg)\n",
+                    cfg.aircraft.max_payload_kg, cfg.aircraft.onboard_equipment_kg);
         for (const auto& p : cfg.payloads) {
-            std::printf("%s  payload '%s' calibrated: %s\n", p.calibrated ? "[OK]  " : "[WARN]",
-                        p.name.c_str(), p.calibrated ? "yes" : "NO (uncalibrated placeholder)");
+            const double margin_kg =
+                cfg.aircraft.max_payload_kg - cfg.aircraft.onboard_equipment_kg - p.mass_kg;
+            std::printf("%s  payload '%s' calibrated: %s, weight margin %.3f kg\n",
+                        p.calibrated ? "[OK]  " : "[WARN]", p.name.c_str(),
+                        p.calibrated ? "yes" : "NO (uncalibrated placeholder)", margin_kg);
         }
+        std::printf("%s  airframe calibrated: %s\n",
+                    cfg.aircraft.airframe_calibrated ? "[OK]  " : "[WARN]",
+                    cfg.aircraft.airframe_calibrated ? "yes" : "NO (uncalibrated placeholder)");
     } catch (const std::exception& e) {
         std::printf("[FAIL] config invalid: %s\n", e.what());
+        return 1;
     }
 
     std::printf("[SKIP] PSDK link status — requires hardware, not run in this build\n");
@@ -65,11 +97,45 @@ int RunSelfTest(const std::string& config_dir) {
     return 0;
 }
 
-int RunSim(const std::string& scenario_name, bool verbose) {
+int RunSim(const std::string& scenario_name, const std::string& profile_dir, bool verbose) {
     using namespace droppoint;
     util::Logger::Instance().SetVerbose(verbose);
 
-    const sim::ScenarioConfig scenario_cfg = sim::ParseScenarioName(scenario_name);
+    sim::ScenarioConfig scenario_cfg = sim::ParseScenarioName(scenario_name);
+
+    // Defaults match the historical built-in sim values (M300-class
+    // airframe, medical-pack-class payload); --profile overrides them with
+    // a config profile directory.
+    core::PayloadProfile payload;
+    payload.name = "sim-medical-pack";
+    payload.mass_kg = 1.5;
+    payload.cda_free = 0.03;
+    payload.min_release_agl_m = 10.0;
+    payload.max_release_agl_m = 120.0;
+    payload.crosswind_limit_mps = 12.0;
+    payload.target_radius_m = 3.0;
+    payload.mechanism_delay_s = 0.15;
+    payload.calibrated = false;
+
+    bool external_operator_backend = false;
+    double release_hold_s = 1.5;
+
+    if (!profile_dir.empty()) {
+        const auto cfg = util::config::LoadAll(profile_dir);
+        scenario_cfg.aircraft_mass_kg = cfg.aircraft.mass_kg;
+        scenario_cfg.cda_airframe = cfg.aircraft.cda_airframe;
+        payload = cfg.payloads.front();
+        external_operator_backend =
+            cfg.aircraft.release.backend == util::config::ReleaseBackend::kExternalOperator;
+        release_hold_s = cfg.aircraft.release.hold_s;
+        std::printf("profile '%s': aircraft=%s payload='%s' backend=%s\n", profile_dir.c_str(),
+                    cfg.aircraft.model.c_str(), payload.name.c_str(),
+                    BackendName(cfg.aircraft.release.backend));
+    }
+
+    // The hover-tilt drag balance must see the same total airborne mass the
+    // wind estimator assumes, or the estimate is biased high.
+    scenario_cfg.payload_mass_kg = payload.mass_kg;
     auto world = std::make_shared<sim::SimWorld>(scenario_cfg);
 
     sim::SimTelemetry telemetry(world);
@@ -78,7 +144,11 @@ int RunSim(const std::string& scenario_name, bool verbose) {
     sim::SimDisplay display;
     sim::SimAudio audio;
     sim::SimLiveview liveview;
-    sim::SimRelease release;
+    sim::SimRelease sim_release;
+    app::ExternalOperatorRelease ext_release;
+    hal::IRelease& release =
+        external_operator_backend ? static_cast<hal::IRelease&>(ext_release)
+                                  : static_cast<hal::IRelease&>(sim_release);
 
     core::projection::Intrinsics intrinsics;
     intrinsics.image_width_px = 1920;
@@ -90,48 +160,104 @@ int RunSim(const std::string& scenario_name, bool verbose) {
 
     sim::SimCrosshairTargetSource crosshair(world, intrinsics);
 
-    core::PayloadProfile payload;
-    payload.name = "sim-medical-pack";
-    payload.mass_kg = 1.5;
-    payload.cda_free = 0.03;
-    payload.min_release_agl_m = 10.0;
-    payload.max_release_agl_m = 120.0;
-    payload.crosswind_limit_mps = 12.0;
-    payload.mechanism_delay_s = 0.15;
-    payload.calibrated = false;
-
     app::GuidanceLoopConfig config;
     config.payload = payload;
+    config.payloads = {payload};
     config.origin = core::geodesy::MakeEnuOrigin(core::LatLonAlt{47.6062, -122.3321, 30.0});
     config.dem_fn = [&world](double lat, double lon) -> std::optional<double> {
         return world->GroundElevationAt(lat, lon);
     };
     config.wind_alpha = 0.14;
+    config.min_run_in_speed_mps = 1.0;
+    config.release_hold_s = release_hold_s;
+    config.aircraft_mass_kg = scenario_cfg.aircraft_mass_kg;
+    config.onboard_equipment_kg = 0.0;
+    config.wind.total_mass_kg = scenario_cfg.aircraft_mass_kg + payload.mass_kg;
+    config.wind.cda_airframe = scenario_cfg.cda_airframe;
 
     app::GuidanceLoop loop(telemetry, gimbal, rangefinder, display, audio, liveview, release,
                             {&crosshair}, config);
 
+    const sim::ScriptedPilot::Plan plan = scenario_cfg.type == sim::ScenarioType::kSteadyHover
+                                              ? sim::ScriptedPilot::Plan::kHoverManual
+                                              : sim::ScriptedPilot::Plan::kRunInAuto;
+    sim::ScriptedPilot pilot(world, &crosshair, plan, payload.mechanism_delay_s);
+
     DP_LOG_INFO("main", std::string("droppoint build ") + util::kBuildVersion +
                             " starting simulator scenario: " + scenario_name);
 
+    int fired_count = 0;
+    double predicted_miss_m = 0.0;
+    core::EnuPoint aim_at_fire{};
+    app::ReleaseMode mode_at_fire = app::ReleaseMode::kManual;
+
     constexpr double kDt = 0.1;  // 10 Hz guidance loop
-    for (int step = 0; step < 200; ++step) {
+    core::Solution solution;
+    for (int step = 0; step < 600; ++step) {  // 60 s of sim time
         world->Step(kDt);
 
-        app::GuidanceLoop::CycleInputs in;
+        app::GuidanceLoop::CycleInputs in = pilot.Tick(solution, loop.Mission());
         in.now_us = world->NowUs();
-        in.set_target_pressed = (step == 5);
-        in.confirm_target_pressed = (step == 6);
-        in.arm_pressed = (step == 7);
+        const auto pre_state = loop.Mission().Id();
+        const bool pilot_saw_window = solution.release_window_open;
+        const double pilot_saw_miss = solution.miss_distance_m;
+        const bool pilot_saw_fwd = solution.forward_valid;
+        solution = loop.Tick(in);
+        if (verbose && (in.arm_pressed || in.manual_release_pressed ||
+                        loop.Mission().Id() != pre_state)) {
+            std::printf(
+                "    t=%.1f press{arm=%d rel=%d} state %d->%d prevsol{win=%d miss=%.2f fwd=%d}\n",
+                step * kDt, in.arm_pressed ? 1 : 0, in.manual_release_pressed ? 1 : 0,
+                static_cast<int>(pre_state), static_cast<int>(loop.Mission().Id()),
+                pilot_saw_window ? 1 : 0, pilot_saw_miss, pilot_saw_fwd ? 1 : 0);
+        }
 
-        const core::Solution solution = loop.Tick(in);
-        if (step % 10 == 0) {
-            std::printf("[t=%.1fs] state=%d has_solution=%d miss=%.2fm\n", step * kDt,
-                        static_cast<int>(loop.Mission().Id()), solution.has_solution, solution.miss_distance_m);
+        if (release.GetState() == hal::ReleaseState::kFired && !world->HasTruthImpact()) {
+            ++fired_count;
+            mode_at_fire = loop.Mission().Mode();
+            predicted_miss_m = solution.miss_distance_m;
+            aim_at_fire = loop.Mission().CurrentTarget().enu;
+            world->SimulateTruthDrop(payload, aim_at_fire);
+        }
+
+        if (step % 50 == 0) {
+            std::printf("[t=%.1fs] state=%d has_solution=%d miss=%.2fm hover=%d\n", step * kDt,
+                        static_cast<int>(loop.Mission().Id()), solution.has_solution,
+                        solution.miss_distance_m, solution.hover_mode ? 1 : 0);
+            if (verbose) {
+                const auto ac = world->Position();
+                const auto vel = world->Velocity();
+                const auto& tgt = loop.Mission().CurrentTarget().enu;
+                std::printf(
+                    "    ac=(%.1f,%.1f) v=(%.2f,%.2f) tgt=(%.1f,%.1f) imp=(%.1f,%.1f) "
+                    "fwd=%d ttr=%.2f window=%d abort='%s'\n"
+                    "    hud='%s'\n",
+                    ac.e, ac.n, vel.e, vel.n, tgt.e, tgt.n,
+                    solution.predicted_impact_point.e, solution.predicted_impact_point.n,
+                    solution.forward_valid ? 1 : 0, solution.time_to_release_s,
+                    solution.release_window_open ? 1 : 0,
+                    loop.Mission().LastAbortReason().c_str(),
+                    display.LastMessage().c_str());
+            }
+        }
+        if (verbose && release.GetState() == hal::ReleaseState::kFired && fired_count == 1) {
+            const auto ac = world->Position();
+            std::printf("    FIRE at t=%.1fs ac=(%.1f,%.1f) miss=%.2f\n", step * kDt, ac.e, ac.n,
+                        solution.miss_distance_m);
         }
     }
 
-    std::printf("Simulation complete. Final release count check: fired=%d\n", release.FireCount() > 0);
+    char truth_buf[32] = "n/a";
+    if (world->HasTruthImpact()) {
+        const double truth_miss_m =
+            core::geodesy::HorizontalRange(world->TruthImpactEnu(), aim_at_fire);
+        std::snprintf(truth_buf, sizeof(truth_buf), "%.2fm", truth_miss_m);
+    }
+
+    std::printf("SUMMARY scenario=%s fired=%d mode=%s predicted_miss=%.2fm truth_miss=%s\n",
+                scenario_name.c_str(), fired_count,
+                mode_at_fire == app::ReleaseMode::kAuto ? "auto" : "manual", predicted_miss_m,
+                truth_buf);
     return 0;
 }
 
@@ -140,6 +266,7 @@ int RunSim(const std::string& scenario_name, bool verbose) {
 int main(int argc, char** argv) {
     std::string scenario;
     std::string config_dir = "config";
+    std::string profile_dir;
     bool verbose = false;
     bool selftest = false;
     for (int i = 1; i < argc; ++i) {
@@ -152,6 +279,8 @@ int main(int argc, char** argv) {
             selftest = true;
         } else if (arg == "--config" && i + 1 < argc) {
             config_dir = argv[++i];
+        } else if (arg == "--profile" && i + 1 < argc) {
+            profile_dir = argv[++i];
         } else if (arg == "--credentials" && i + 1 < argc) {
             ++i;  // consumed, PSDK-backed startup path only (not this sim build)
         } else if (arg == "--help" || arg == "-h") {
@@ -171,7 +300,7 @@ int main(int argc, char** argv) {
     }
 
     try {
-        return RunSim(scenario, verbose);
+        return RunSim(scenario, profile_dir, verbose);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "fatal: %s\n", e.what());
         return 1;

@@ -36,20 +36,28 @@ struct LatLonAlt {
 // Aircraft kinematic state at one instant, already fused/converted into the
 // local ENU frame. Populated by app/ from HAL telemetry; core/ never touches
 // a HAL interface directly.
+//
+// Attitude conventions (fixed here, relied on by core::wind and app/):
+//   yaw_rad   — ENU math angle: 0 = East, counter-clockwise positive.
+//   pitch_rad — positive = nose up.
+//   roll_rad  — positive = right wing down.
+//   timestamp_us — local monotonic clock; the SAME domain as
+//               CycleInputs.now_us in app/. Never mix with any other clock.
 struct AircraftState {
     std::uint64_t timestamp_us = 0;  // monotonic, aligned to a single clock domain
     EnuPoint position;
     EnuVector velocity;
     double yaw_rad = 0.0;    // aircraft heading, ENU convention (0 = East, CCW positive)
-    double pitch_rad = 0.0;
-    double roll_rad = 0.0;
+    double pitch_rad = 0.0;  // positive = nose up
+    double roll_rad = 0.0;   // positive = right wing down
     LatLonAlt geodetic;      // for DEM lookups and logging
     bool valid = false;
 };
 
 struct GimbalState {
     std::uint64_t timestamp_us = 0;
-    double yaw_rad = 0.0;    // meaning depends on aircraft.yaml gimbal_yaw_source
+    double yaw_rad = 0.0;    // compass heading in the ground frame: 0 = North,
+                           // clockwise positive (not the ENU math angle above)
     double pitch_rad = 0.0;  // 0 = level, negative = looking down (down = -pi/2)
     double roll_rad = 0.0;
     double zoom_ratio = 1.0;
@@ -101,7 +109,14 @@ struct BallisticResult {
 };
 
 // A designated ground target (raycast.* / terrain.*)
-enum class ElevationSource { kUnknown, kRawDem, kLrfCorrected };
+enum class ElevationSource {
+    kUnknown,
+    kRawDem,        // elevation read straight off the DEM tiles
+    kLrfCorrected,  // DEM + live LRF datum-bias correction (see terrain.h)
+    kHomeTiedDem,   // DEM value tied to the takeoff point's measured elevation
+    kFlatAtHome,    // flat-terrain fallback: target elevation assumed equal to
+                    // the takeoff/home elevation (no DEM data used at all)
+};
 
 struct Target {
     bool valid = false;
@@ -148,6 +163,27 @@ struct Solution {
     EnuPoint predicted_impact_point;
     double time_to_release_s = 0.0;   // seconds until the computed release instant, may be negative
     double miss_distance_m = 0.0;     // predicted impact vs latched target
+
+    // Forward "impact if released NOW" prediction, computed every cycle the
+    // target is latched and the aircraft state is valid. This is the only
+    // meaningful release cue in a hover, where the inverse solver cannot
+    // converge (spec: hovering over the target is the normal multirotor drop).
+    EnuPoint impact_if_released_now;
+    double miss_if_released_now_m = 0.0;
+    bool forward_valid = false;
+    // True when the loop is in hover mode (ground speed below the run-in
+    // threshold): has_solution is then driven by forward_valid, not the
+    // inverse solver, and time_to_release_s is meaningless.
+    bool hover_mode = false;
+    // True when the current predicted miss is inside the payload's
+    // target_radius_m: manual RELEASE is honoured while this holds.
+    bool release_window_open = false;
+    // Steering cue: how far and on which compass bearing (0 = North, CW
+    // positive) the aircraft must move so impact_if_released_now lands on
+    // the target. Bearing is from impact_if_released_now to the target.
+    double steer_distance_m = 0.0;
+    double steer_bearing_rad = 0.0;
+
     BallisticResult ballistics;
     DispersionResult dispersion;
     std::string no_solution_reason;   // populated when has_solution == false

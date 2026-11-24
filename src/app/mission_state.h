@@ -29,7 +29,12 @@ public:
     MissionStateId Id() const { return id_; }
     const core::Target& CurrentTarget() const { return target_; }
     ReleaseMode Mode() const { return mode_; }
-    void SetMode(ReleaseMode mode) { mode_ = mode; }
+
+    // Mode changes are rejected while ARMED/COUNTDOWN/RELEASED (the operator
+    // must abort/disarm first) and AUTO is rejected outright when the
+    // release backend is operator-actuated — an auto drop is meaningless if
+    // the software cannot actuate the kit.
+    bool TrySetMode(ReleaseMode mode, bool auto_allowed, std::string* reject_reason);
 
     // Source-agnostic: app/ calls this with whatever ITargetSource produced,
     // per spec section 3's priority order.
@@ -42,13 +47,18 @@ public:
     // confirmed target and all hard gates passing (spec 8.1).
     bool TryArm(std::uint64_t now_us, bool gates_pass, std::string* reject_reason);
 
-    // Called every guidance-loop cycle while armed/counting down; expires
-    // arming after 60 s idle and re-evaluates hard gates continuously in
-    // auto mode (spec 8.3). Any hard-gate trip while armed or counting down
-    // is an abort.
-    void Tick(std::uint64_t now_us, bool gates_pass, const std::string& trip_reason);
+    // Called every guidance-loop cycle; expires arming after 60 s idle
+    // (spec 8.3). Hard-gate aborts while armed/counting down are owned by
+    // ReleaseManager, which also commands SetSafe — a gate trip must never
+    // leave the mechanism in a non-safe state for even one cycle.
+    void Tick(std::uint64_t now_us);
 
     void EnterCountdown();
+
+    // COUNTDOWN -> ARMED: the run-in geometry moved back outside the
+    // countdown window, or a missed manual pass was reset. Resets the 60 s
+    // arm-idle timer so a long approach does not expire mid-attempt.
+    void ReturnToArmed(std::uint64_t now_us);
     void OnAbort(const std::string& reason);
     void OnReleased(std::uint64_t now_us);
     // Every drop requires a fresh arm: returns to IDLE and disarms.
