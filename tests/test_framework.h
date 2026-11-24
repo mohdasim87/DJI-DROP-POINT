@@ -7,6 +7,7 @@
 // dependencies too.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>

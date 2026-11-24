@@ -28,6 +28,12 @@ struct Credentials {
 // any field is empty — there is no default credential, by design.
 Credentials LoadCredentials(const std::string& path);
 
+// True when a parsed credentials file still contains the example placeholder
+// values shipped in config/credentials.example.yaml ("your_app_name", ...).
+// A fresh package install legitimately has these — the no-link self-test
+// reports WARN rather than FAIL for them.
+bool IsExampleCredentials(const Credentials& creds);
+
 // TODO(hardware): call DjiCore_Init(&user_info) with a T_DjiUserInfo built
 // from Credentials, then DjiCore_ApplicationStart(). Requires linking
 // libpayloadsdk.a and the platform HAL registration in platform_linux.cpp

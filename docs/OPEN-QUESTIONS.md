@@ -81,7 +81,17 @@ ahead of the hover-estimate fallback.
 
 ## 3. RC hardware button mapping
 
-**Answer: No public API to map custom PSDK actions to physical RC buttons.**
+**Corrected answer: Yes — through the widget configuration, not through an
+API call.** The original answer below was wrong. `widget_config.json`
+supports a `customize_rc_buttons_config` block per widget (see DJI's sample
+at `samples/sample_c/module_sample/widget/widget_file/en_big_screen/`), which
+lets the operator bind that widget to an RC hardware button in DJI Pilot 2's
+custom-button settings. DropPoint enables it for SET TARGET, CONFIRM, ARM,
+RELEASE, ABORT, CLEAR TARGET and MODE. The RC-channel polling approach
+described below is no longer used. Still to confirm on hardware: which RC
+buttons Pilot 2 offers for binding on the RC Plus 2, and the press latency.
+
+**Original answer (superseded): No public API to map custom PSDK actions to physical RC buttons.**
 
 **Evidence:** No "custom button", "RC button mapping", or action-bar-to-RC
 binding function exists anywhere under `psdk_lib/include/`. RC data is only
@@ -229,11 +239,10 @@ counter-clockwise). With the gimbal pitched 45° down, confirm
 
 ## 9. Rangefinder altitude and distance units
 
-`T_DjiCameraManagerLaserRangingInfo` declares `altitude` and `distance` as
-`int32_t`, but the header comment does not state the scaling factor. The
-`src/psdk/rangefinder_camera_manager.cpp` adapter currently multiplies by 0.1
-(tenths of a metre) because that is a common DJI fixed-point convention, but
-this is an assumption.
+**Resolved from the header.** `dji_camera_manager.h` (v3.16.0) documents
+`altitude` and `distance` as `Unit: 0.1m`, and longitude/latitude in degrees.
+The earlier statement here that the header gave no scaling was wrong. What
+remains open is only which altitude datum the laser result uses, below.
 
 **Question for a human on real hardware:** Capture a set of
 `DjiCameraManager_GetLaserRangingInfo` readings at known slant ranges and
@@ -245,12 +254,15 @@ unit. If the scaling differs from 0.1, update
 
 ## 10. Audio TTS trigger mechanism
 
-The PSDK widget speaker model registers a handler (`DjiWidget_RegSpeakerHandler`)
-through which Pilot sends audio data. There is no obvious public function to
-pass a text string to Pilot and have it synthesize speech. The current
-`AudioSpeaker::Speak()` therefore only logs the phrase and tracks a busy flag;
-real countdown audio would need either a local companion-computer audio output
-or a deeper understanding of how Pilot triggers TTS for a registered speaker.
+**Updated.** The widget speaker handler is for a loudspeaker *on the payload*
+(Pilot sends it audio to play); it cannot make the RC speak, so DropPoint no
+longer registers it. There is no PSDK call that makes Pilot 2 read out a
+phrase. What exists is `DjiHmsCustomization_AlarmEnhancedCtrl`
+(`dji_hms_customization.h`), which plays an alarm sound and/or vibrates the
+RC and is documented as Manifold 3 only. DropPoint uses it for the countdown
+on Manifold 3 (one pulse per cue, three for "drop") and falls back to
+text-only on other companion computers. Untested: what the alarm actually
+sounds like and whether pulses one second apart are distinguishable.
 
 **Question for a human with DJI support / hardware:** Confirm how a PSDK app
 initiates spoken countdown phrases. If the companion computer must drive its
@@ -262,13 +274,13 @@ countdown clip.
 
 ## 11. Widget UI configuration / action buttons
 
-`DjiWidget_RegDefaultUiConfigByDirPath` and `T_DjiWidgetHandlerListItem` allow
-a PSDK app to expose buttons, switches, scales, lists, and int-input boxes in
-DJI Pilot 2. The current DropPoint build only uses the floating window
-(`DjiWidgetFloatingWindow_ShowMessage`) and the speaker handler; it does not
-register a widget configuration file, so the operator cannot yet press virtual
-ARM/RELEASE/ABORT buttons in Pilot. This is a gap relative to spec section 9
-(widget action-bar limit of 8 widgets).
+**Implemented, untested on Pilot 2.** DropPoint now generates
+`widget_config.json` (plain JSON plus PNG icons — not binary files, as this
+entry previously said) and registers ten widgets: SET TARGET, CONFIRM, ARM,
+RELEASE, ABORT on the main interface, and CLEAR TARGET, MODE, PAYLOAD, TEMP,
+SURFACE on the settings page. Still to confirm on hardware: that Pilot 2
+accepts the generated file, how the five main-interface widgets are laid out
+on the RC Plus 2, and the icon sizes it expects.
 
 **Question for a human with hardware:** Produce or obtain the DJI widget
 configuration binary files for the target screen size/language and wire them
@@ -276,3 +288,59 @@ in via `DjiWidget_RegDefaultUiConfigByDirPath` in `main_psdk.cpp`. Map the
 button indices to the `CycleInputs` fields (set_target, confirm_target, arm,
 release, abort) so the app can be fully controlled from Pilot as well as from
 RC switches.
+
+---
+
+## 12. What a third-party companion computer may do on Matrice 4T and Matrice 400
+
+**Answer (from DJI's Open Capability List, read 2026-11):** only basic
+functions — data subscription, custom widgets, floating window, power
+management, time sync, custom HMS. Camera management (laser rangefinder,
+zoom), gimbal management and liveview AI/AR overlays are "advanced" and are
+open only to a Manifold 3 or to developers DJI has granted advanced
+permission. `aircraft.yaml` `advanced_features` gates every such call.
+
+**Question for a human:** if the laser rangefinder is wanted on a Matrice 4T
+(where a Manifold 3 uses almost the whole 200 g payload allowance), apply to
+DJI for PSDK advanced permission and record the outcome here.
+
+---
+
+## 13. Driving a CZI drop kit through the Widget Manager (Matrice 400)
+
+`dji_widget_manager.h` lets one Linux PSDK device set another payload's
+widget; DJI documents it for Matrice 400 only. DropPoint's `psdk_widget`
+release backend uses it. Unknown until tried: whether the CZI TH4 accepts a
+Widget Manager press like an operator press, the index and type of its drop
+widget, whether its anti-misdrop interlock needs another widget set first,
+and the mount position it reports on a SkyPort V3 adapter. Procedure:
+`docs/CZI-DROP-KITS.md`.
+
+---
+
+## 14. Altitude datums for the take-off terrain tie and the laser result
+
+`POSITION_FUSED.altitude` is documented as WGS-84 ellipsoid height. SRTM tiles
+are heights above mean sea level. DropPoint ties the two together at the
+take-off point, which removes the offset locally. Not confirmed: that the
+fused altitude really is ellipsoidal on these aircraft (some DJI fields named
+the same way are barometric), and which datum
+`T_DjiCameraManagerLaserRangingInfo.altitude` uses. A constant offset between
+the laser result and the fused altitude would shift every laser-ranged target
+height by that amount.
+
+**Check on hardware:** on the ground at a surveyed point, log
+`POSITION_FUSED.altitude`; range a point of known height and log the laser
+altitude; compare both with the survey.
+
+---
+
+## 15. Subscription topics on Matrice 4T and Matrice 400
+
+DropPoint needs `QUATERNION`, `VELOCITY`, `POSITION_FUSED` and
+`GIMBAL_ANGLES`, and uses `STATUS_FLIGHT`, `RTK_POSITION_INFO` and
+`ALTITUDE_OF_HOMEPOINT` if present. The header does not say which topics each
+aircraft publishes or at what maximum rate. `droppoint --selftest` on the
+aircraft lists each topic as acquired or missing; record the result here for
+both aircraft. If `GIMBAL_ANGLES` is missing, crosshair designation cannot
+work and the gimbal attitude will have to come from somewhere else.

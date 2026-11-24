@@ -20,6 +20,7 @@ set(DROPPOINT_TEST_SOURCES
     test_terrain_provider.cpp
     test_pwm_servo_release.cpp
     test_sd_notify.cpp
+    test_selftest_report.cpp
 )
 
 if(DROPPOINT_BUILD_PSDK)

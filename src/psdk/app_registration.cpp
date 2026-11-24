@@ -64,4 +64,10 @@ Credentials LoadCredentials(const std::string& path) {
     return creds;
 }
 
+bool IsExampleCredentials(const Credentials& creds) {
+    return creds.app_name == "your_app_name" || creds.app_id == "your_app_id" ||
+           creds.app_key == "your_app_key" || creds.app_license == "your_app_license" ||
+           creds.developer_account == "your_developer_account_email";
+}
+
 }  // namespace droppoint::psdk

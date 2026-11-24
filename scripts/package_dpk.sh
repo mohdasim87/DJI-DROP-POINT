@@ -38,13 +38,13 @@ if [[ ! -f "$CREDS" ]]; then
 fi
 if [[ -z "$PSDK_ROOT" ]]; then
     for cand in "$ROOT/third_party/psdk" "$ROOT/../psdk-upstream"; do
-        if [[ -x "$cand/tools/build_dpk/build_dpk.sh" ]]; then
+        if [[ -f "$cand/tools/build_dpk/build_dpk.sh" ]]; then
             PSDK_ROOT="$cand"
             break
         fi
     done
 fi
-if [[ ! -x "$PSDK_ROOT/tools/build_dpk/build_dpk.sh" ]]; then
+if [[ ! -f "$PSDK_ROOT/tools/build_dpk/build_dpk.sh" ]]; then
     echo "build_dpk.sh not found under '$PSDK_ROOT' — pass the PSDK checkout as arg 5" >&2
     exit 1
 fi
@@ -116,7 +116,7 @@ sed -e "s|@USER_APP_ID@|$APP_ID|g" \
     "$ROOT/packaging/manifold3/app.json.in" > "$STAGE/app.json"
 
 mkdir -p "$OUT_DIR"
-"$PSDK_ROOT/tools/build_dpk/build_dpk.sh" -i "$STAGE/app.json" -o "$OUT_DIR"
+bash "$PSDK_ROOT/tools/build_dpk/build_dpk.sh" -i "$STAGE/app.json" -o "$OUT_DIR"
 
 DPK="$OUT_DIR/${NAME_EN}_v${FW_VERSION}.dpk"
 if [[ ! -f "$DPK" ]]; then

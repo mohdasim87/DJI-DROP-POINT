@@ -33,30 +33,46 @@ jobs:
           git clone --depth 1 --branch 3.16.0 \
             https://github.com/dji-sdk/Payload-SDK third_party/psdk
 
+      # RelWithDebInfo keeps the Release optimisation but adds -g so the gdb
+      # fallback below can symbolise a crash.
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDROPPOINT_BUILD_PSDK=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDROPPOINT_BUILD_PSDK=ON
 
       - name: Build
         run: cmake --build build --parallel --target droppoint
+
+      - name: Install gdb (crash diagnosis)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb
 
       - name: Version
         run: ./build/src/psdk/droppoint --version
 
       - name: Selftest (no link)
         run: |
+          set -x
           # Mirror what the .deb postinst does on a fresh install: the
           # credentials file (example values) must exist for the selftest.
           sudo mkdir -p /etc/droppoint
           sudo cp config/credentials.example.yaml /etc/droppoint/credentials.yaml
           # The widget-icon lookup expects <config dir>/../assets/widget —
           # stage the packaged layout with symlinks for both profiles.
+          rc=0
           for profile in m4t m400; do
             stage=/tmp/dp-$profile
             mkdir -p "$stage"
             ln -sfn "$PWD/config/profiles/$profile" "$stage/config"
             ln -sfn "$PWD/assets" "$stage/assets"
-            ./build/src/psdk/droppoint --selftest --no-link --config "$stage/config"
+            if ! ./build/src/psdk/droppoint --selftest --no-link --config "$stage/config"; then
+              rc=1
+              echo "::error::selftest failed for profile $profile — dumping log and re-running under gdb"
+              cat ./data/logs/selftest.txt 2>/dev/null || true
+              gdb -batch -ex run -ex bt --args \
+                ./build/src/psdk/droppoint --selftest --no-link --config "$stage/config" || true
+            fi
           done
+          exit $rc
 
   package-arm64:
     runs-on: ubuntu-22.04-arm
@@ -94,14 +110,14 @@ jobs:
           VERSION="${VERSION:-0.2.0}"
           echo "version=$VERSION"
           for profile in m4t m400; do
-            scripts/package.sh "$profile" "$VERSION" build dist
+            bash scripts/package.sh "$profile" "$VERSION" build dist
           done
 
       - name: Package m400 .dpk (packaging check only — dummy credentials)
         run: |
           VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g')"
           VERSION="${VERSION:-0.2.0}"
-          scripts/package_dpk.sh m400 build tests/data/credentials_test.yaml /tmp/dpk \
+          bash scripts/package_dpk.sh m400 build tests/data/credentials_test.yaml /tmp/dpk \
             third_party/psdk
           DPK="$(ls /tmp/dpk/DropPoint-M400_v*.dpk | head -1)"
           echo "dpk=$DPK"
@@ -139,7 +155,11 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               dpkg -i '/dist/$(basename $DEB)'
               /opt/droppoint/bin/droppoint --version
-              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config
+              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config || {
+                echo '::error::selftest failed — dumping report log if present'
+                cat /var/log/droppoint/selftest.txt ./data/logs/selftest.txt 2>/dev/null || true
+                exit 1
+              }
               /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config
               # upgrade-marker survival: site config edit, real credentials,
               # and the log dir must all survive a reinstall

@@ -56,8 +56,6 @@ add_library(droppoint_psdk STATIC
     release_widget.h
     probe_widgets.cpp
     probe_widgets.h
-    selftest.cpp
-    selftest.h
 )
 
 target_include_directories(droppoint_psdk PUBLIC

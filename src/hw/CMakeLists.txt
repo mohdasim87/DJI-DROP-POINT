@@ -9,6 +9,7 @@ add_library(droppoint_hw STATIC
     terrain_provider.cpp
     pwm_servo_release.cpp
     sd_notify.cpp
+    selftest_report.cpp
 )
 target_include_directories(droppoint_hw PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

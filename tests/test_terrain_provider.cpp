@@ -162,3 +162,22 @@ TEST_CASE("Terrain: DemTileCount counts only valid .hgt names") {
     REQUIRE(tp.DemTileCount() == 2);
     std::filesystem::remove_all(g_dir);
 }
+
+TEST_CASE("Terrain: non-existent dem_directory yields no tiles, no throw") {
+    // The install-test runner has no /opt/droppoint/data/dem — the provider
+    // must degrade quietly rather than throw out of DemTileCount()/Elevation().
+    g_dir = std::filesystem::temp_directory_path() / "dp_dem_absent_9f3d";
+    std::filesystem::remove_all(g_dir);  // ensure it does not exist
+
+    TerrainProvider tp(Cfg(/*raw=*/true));
+    REQUIRE(tp.DemTileCount() == 0);
+    REQUIRE(!tp.Elevation(34.5, 73.25).has_value());
+    REQUIRE(tp.SourceFor(34.5, 73.25) == ElevationSource::kUnknown);
+
+    // Home tie on a dir with no tiles: offset 0, flat fallback serves home alt.
+    tp.SetHomeTie(34.5, 73.25, 412.0);
+    const auto e = tp.Elevation(34.5, 73.25);
+    REQUIRE(e.has_value());
+    REQUIRE_NEAR(*e, 412.0, 1e-6);
+    REQUIRE(tp.SourceFor(34.5, 73.25) == ElevationSource::kFlatAtHome);
+}

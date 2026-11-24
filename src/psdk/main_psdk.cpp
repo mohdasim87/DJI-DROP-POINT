@@ -60,7 +60,7 @@
 #include "psdk/probe_widgets.h"
 #include "psdk/rangefinder_camera_manager.h"
 #include "psdk/release_widget.h"
-#include "psdk/selftest.h"
+#include "hw/selftest_report.h"
 #include "psdk/telemetry_subscription.h"
 #include "psdk/widget_bridge.h"
 #include "util/config.h"
@@ -334,11 +334,27 @@ int main(int argc, char** argv) {
         }
         g_release_for_shutdown = release;
 
+        // The atexit handler reads g_release_for_shutdown, but the object lives
+        // in the unique_ptrs above — on ANY return from this scope they would
+        // die first and the handler would fire on a dangling pointer. This
+        // guard is declared last so it destructs FIRST: it drives the release
+        // safe while it is still alive and then clears the global, so the
+        // atexit handler becomes a no-op on every exit path (normal return,
+        // early return, exception unwind).
+        struct ReleaseShutdownGuard {
+            ~ReleaseShutdownGuard() {
+                SafeShutdown();
+                g_release_for_shutdown = nullptr;
+            }
+        } release_guard;
+
         // ---- selftest --no-link: everything that needs no aircraft ----------
         if (selftest && no_link) {
-            droppoint::psdk::SelftestInput si;
+            droppoint::hw::SelftestFacts si;
             si.config = &cfg;
-            si.credentials = creds ? &*creds : nullptr;
+            si.credentials_parsed = creds.has_value();
+            si.credentials_placeholder =
+                creds.has_value() && droppoint::psdk::IsExampleCredentials(*creds);
             si.credentials_path = credentials_path;
             si.credentials_parse_error = creds_parse_error;
             si.link = false;
@@ -347,8 +363,9 @@ int main(int argc, char** argv) {
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
             bool had_fail = false;
-            const std::string report = droppoint::psdk::BuildSelftestReport(si, &had_fail);
+            const std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::fputs(report.c_str(), stdout);
+            std::fflush(stdout);
             std::error_code ec;
             std::filesystem::create_directories(log_dir, ec);
             FILE* f = std::fopen((fs::path(log_dir) / "selftest.txt").string().c_str(), "w");
@@ -456,15 +473,21 @@ int main(int argc, char** argv) {
 
         // ---- selftest WITH link -------------------------------------------------
         if (selftest) {
-            droppoint::psdk::SelftestInput si;
+            droppoint::hw::SelftestFacts si;
             si.config = &cfg;
-            si.credentials = &*creds;
+            si.credentials_parsed = true;
+            si.credentials_placeholder = droppoint::psdk::IsExampleCredentials(*creds);
             si.credentials_path = credentials_path;
             si.link = true;
             si.model_matches = model_matches;
             si.aircraft_reported = reported_model;
-            si.telemetry = &telemetry;
-            si.rangefinder = psdk_rangefinder.get();
+            si.telemetry_present = true;
+            for (const auto& t : telemetry.TopicStatus()) {
+                si.topics.push_back({t.name, t.subscribed, t.frequency_hz, t.required});
+            }
+            si.gnss = telemetry.GetGnssStatus();
+            si.rangefinder_initialised =
+                psdk_rangefinder != nullptr && psdk_rangefinder->IsInitialised();
             si.release = release;
             si.dem_tile_count = terrain.DemTileCount();
             si.home_tie = terrain.HasHomeTie();
@@ -472,8 +495,9 @@ int main(int argc, char** argv) {
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
             bool had_fail = false;
-            const std::string report = droppoint::psdk::BuildSelftestReport(si, &had_fail);
+            const std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::fputs(report.c_str(), stdout);
+            std::fflush(stdout);
             FILE* f = std::fopen((fs::path(log_dir) / "selftest.txt").string().c_str(), "w");
             if (f != nullptr) {
                 std::fputs(report.c_str(), f);

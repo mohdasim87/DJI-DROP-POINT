@@ -1,16 +1,12 @@
-// psdk/selftest.cpp — see header. Status: unverified — requires hardware.
-#include "selftest.h"
+// hw/selftest_report.cpp — see header.
+#include "selftest_report.h"
 
 #include <sstream>
 
-#include "app_registration.h"
 #include "hal/i_release.h"
-#include "hw/conversions.h"
-#include "rangefinder_camera_manager.h"
-#include "telemetry_subscription.h"
 #include "util/version.h"
 
-namespace droppoint::psdk {
+namespace droppoint::hw {
 
 namespace {
 
@@ -28,7 +24,7 @@ const char* RtkName(hal::RtkFixStatus s) {
 
 }  // namespace
 
-std::string BuildSelftestReport(const SelftestInput& in, bool* had_fail) {
+std::string BuildSelftestReport(const SelftestFacts& in, bool* had_fail) {
     std::ostringstream os;
     bool fail = false;
 
@@ -45,8 +41,14 @@ std::string BuildSelftestReport(const SelftestInput& in, bool* had_fail) {
                        std::to_string(cfg.payloads.size()) + " payload profile(s), " +
                        std::to_string(cfg.lenses.size()) + " lens profile(s))");
 
-    if (in.credentials != nullptr) {
-        Line(os, "OK", "credentials file parsed: " + in.credentials_path);
+    if (in.credentials_parsed) {
+        if (in.credentials_placeholder) {
+            Line(os, "WARN", "credentials file still contains the example placeholders "
+                             "— fill in real DJI app credentials at " +
+                                 in.credentials_path);
+        } else {
+            Line(os, "OK", "credentials file parsed: " + in.credentials_path);
+        }
     } else if (in.credentials_parse_error) {
         Line(os, "FAIL", "credentials file present but could not be parsed: " +
                              in.credentials_path);
@@ -121,8 +123,8 @@ std::string BuildSelftestReport(const SelftestInput& in, bool* had_fail) {
     }
     Line(os, "OK", "PSDK link established and credentials accepted by the FC");
 
-    if (in.telemetry != nullptr) {
-        for (const auto& t : in.telemetry->TopicStatus()) {
+    if (in.telemetry_present) {
+        for (const auto& t : in.topics) {
             if (t.subscribed) {
                 Line(os, "OK", "subscription topic " + t.name + " acquired @" +
                                    std::to_string(t.frequency_hz) + " Hz");
@@ -133,14 +135,13 @@ std::string BuildSelftestReport(const SelftestInput& in, bool* had_fail) {
                 Line(os, "WARN", "optional subscription topic " + t.name + " not acquired");
             }
         }
-        const auto gnss = const_cast<PsdkTelemetry*>(in.telemetry)->GetGnssStatus();
-        Line(os, "INFO", "GNSS: " + std::to_string(gnss.satellite_count) +
-                             " satellites, RTK " + RtkName(gnss.rtk_status));
+        Line(os, "INFO", "GNSS: " + std::to_string(in.gnss.satellite_count) +
+                             " satellites, RTK " + RtkName(in.gnss.rtk_status));
     }
     Line(os, "INFO", "wind topic: absent by design (hover-attitude estimator in app/)");
 
     if (cfg.aircraft.advanced_features && cfg.aircraft.rangefinder_present) {
-        if (in.rangefinder != nullptr && in.rangefinder->IsInitialised()) {
+        if (in.rangefinder_initialised) {
             Line(os, "OK", "laser rangefinder initialised (camera manager)");
         } else {
             Line(os, "WARN", "laser rangefinder configured but camera manager unavailable");
@@ -162,4 +163,4 @@ std::string BuildSelftestReport(const SelftestInput& in, bool* had_fail) {
     return os.str();
 }
 
-}  // namespace droppoint::psdk
+}  // namespace droppoint::hw
