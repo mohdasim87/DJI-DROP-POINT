@@ -1,34 +1,32 @@
 #!/usr/bin/env bash
-# scripts/rollback.sh
+# scripts/rollback.sh <previous-package.deb>
 #
-# Status: unverified — requires hardware.
+# One-command rollback: reinstalls the previous .deb over the current one
+# (dpkg handles the downgrade; site edits in /opt/droppoint/config survive
+# because the yaml files are dpkg conffiles, and /etc/droppoint/credentials.yaml
+# is never touched by a package).
 #
-# One-command rollback to the previously installed version (spec 15.3).
-# Assumes install.sh keeps the previous package under
-# /opt/droppoint-releases/<version>/ and /opt/droppoint is a symlink to the
-# active one; credentials, config, calibration and drop log all live outside
-# /opt/droppoint/bin so they are untouched by switching the symlink.
+# Usage: rollback.sh /path/to/droppoint-<profile>_<previous-version>_arm64.deb
 set -euo pipefail
 
-RELEASES_DIR="/opt/droppoint-releases"
-ACTIVE_LINK="/opt/droppoint"
+DEB="${1:?usage: rollback.sh <previous package.deb>}"
 
 if [[ $EUID -ne 0 ]]; then
-  echo "run as root" >&2
-  exit 1
+    echo "run as root" >&2
+    exit 1
+fi
+if [[ ! -f "$DEB" ]]; then
+    echo "package not found: $DEB" >&2
+    exit 1
 fi
 
-current=$(readlink -f "${ACTIVE_LINK}" || true)
-mapfile -t versions < <(ls -1 "${RELEASES_DIR}" | sort -V)
-
-if [[ ${#versions[@]} -lt 2 ]]; then
-  echo "no previous version to roll back to" >&2
-  exit 1
+if [[ -d /run/systemd/system ]]; then
+    systemctl stop droppoint.service || true
 fi
 
-previous="${versions[-2]}"
-echo "Rolling back from $(basename "${current}") to ${previous}..."
-systemctl stop droppoint.service
-ln -sfn "${RELEASES_DIR}/${previous}" "${ACTIVE_LINK}"
-systemctl start droppoint.service
-echo "Rollback complete. Active version: ${previous}"
+dpkg -i "$DEB"
+
+if [[ -d /run/systemd/system ]]; then
+    systemctl start droppoint.service || true
+fi
+echo "Rollback complete. Installed version: $(dpkg-deb -f "$DEB" Version 2>/dev/null || echo '?')"

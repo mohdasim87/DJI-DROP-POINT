@@ -41,6 +41,11 @@ psdk_platform: "generic_linux"
 advanced_features: false
 liveview_marker: false
 uart_device: "/dev/ttyUSB0"
+# USB-serial adapter identity reported to the flight controller (M400 has no
+# E-Port UART pins — a USB-serial dongle carries the UART link). Defaults are
+# the FTDI FT232; CP2102 = 0x10C4/0xEA60.
+uart_usb_vid: 0x0403
+uart_usb_pid: 0x6001
 camera_mount_position: 1
 
 # one of: only_uart, uart_and_usb_bulk, uart_and_network, only_usb_bulk,

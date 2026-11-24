@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(droppoint LANGUAGES CXX)
+# Single version source: PROJECT_VERSION_* feeds util/version.h,
+# DjiCore_SetFirmwareVersion and the Manifold 3 app.json firmware_version.
+project(droppoint VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -62,6 +64,12 @@ FetchContent_Declare(
   GIT_TAG        0.8.0
 )
 FetchContent_MakeAvailable(yaml-cpp)
+# yaml-cpp 0.8.0 uses uint16_t/uint32_t without including <cstdint>, which
+# GCC 13+ (Ubuntu 24.04 CI image) rejects. Force-include it on non-MSVC so
+# the pinned tag builds unmodified.
+if(NOT MSVC AND TARGET yaml-cpp)
+  target_compile_options(yaml-cpp PRIVATE -include cstdint)
+endif()
 if(DROPPOINT_SAVED_POLICY_MIN)
   set(CMAKE_POLICY_VERSION_MINIMUM ${DROPPOINT_SAVED_POLICY_MIN})
 else()
@@ -76,6 +84,7 @@ add_subdirectory(src/util)
 add_subdirectory(src/hal)
 add_subdirectory(src/sim)
 add_subdirectory(src/app)
+add_subdirectory(src/hw)
 
 if(DROPPOINT_BUILD_PSDK)
   add_subdirectory(src/psdk)

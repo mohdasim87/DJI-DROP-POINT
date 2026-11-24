@@ -279,10 +279,18 @@ core::Solution GuidanceLoop::Tick(const CycleInputs& in) {
         if (in.ambient_temperature_c.has_value() && std::isfinite(*in.ambient_temperature_c)) {
             temperature_c_ = *in.ambient_temperature_c;
         }
+        if (in.requested_wind_alpha.has_value() && std::isfinite(*in.requested_wind_alpha) &&
+            *in.requested_wind_alpha > 0.0) {
+            config_.wind_alpha = *in.requested_wind_alpha;
+        }
+        if (in.requested_surface_index.has_value()) {
+            surface_index_ = *in.requested_surface_index;
+        }
         if (in.requested_payload_index.has_value()) {
             const int idx = *in.requested_payload_index;
             if (idx >= 0 && idx < static_cast<int>(config_.payloads.size())) {
                 active_payload_ = config_.payloads[static_cast<std::size_t>(idx)];
+                active_payload_index_ = idx;
                 wind_estimator_.SetTotalMassKg(config_.aircraft_mass_kg +
                                                config_.onboard_equipment_kg + active_payload_.mass_kg);
             }

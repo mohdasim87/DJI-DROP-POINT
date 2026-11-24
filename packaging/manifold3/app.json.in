@@ -1,0 +1,39 @@
+{
+    "user_app_id": "@USER_APP_ID@",
+    "firmware_version": "@FIRMWARE_VERSION@",
+    "is_ai_rendering": "false",
+    "platform": "manifold3",
+    "name":{
+        "name_cn": "@NAME_EN@",
+        "name_en": "@NAME_EN@",
+        "name_jp": "@NAME_EN@",
+        "name_fr": "@NAME_EN@"
+    },
+    "description": {
+        "description_cn": [
+            "DropPoint precision payload-drop guidance for DJI aircraft."
+        ],
+        "description_en": [
+            "DropPoint precision payload-drop guidance for DJI aircraft."
+        ],
+        "description_jp": [
+            "DropPoint precision payload-drop guidance for DJI aircraft."
+        ],
+        "description_fr": [
+            "DropPoint precision payload-drop guidance for DJI aircraft."
+        ]
+    },
+    "maintainer": {
+        "maintainer_cn": "@MAINTAINER@",
+        "maintainer_en": "@MAINTAINER@",
+        "maintainer_jp": "@MAINTAINER@",
+        "maintainer_fr": "@MAINTAINER@"
+    },
+    "ver_min": "00.00.00.00",
+    "ver_max": "99.99.99.99",
+    "bin": "bin/droppoint",
+    "userconfig": [
+        "config",
+        "assets"
+    ]
+}

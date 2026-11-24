@@ -11,3 +11,6 @@ CMakeFiles/
 CMakeCache.txt
 compile_commands.json
 config/credentials.yaml
+third_party/
+dist/
+*.dpk

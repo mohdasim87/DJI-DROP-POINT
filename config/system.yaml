@@ -35,6 +35,12 @@ wind:
 
 allow_flat_terrain_fallback: true   # permit ElevationSource::kFlatAtHome when no DEM data exists
 
+# SRTM tiles are EGM96 mean-sea-level; the aircraft reports WGS-84 ellipsoid
+# altitude. A raw (untied) DEM elevation is therefore refused by default.
+# Only enable when operating without a home tie is acceptable.
+terrain:
+  allow_raw_dem: false
+
 # Default release mode at boot: "manual" or "auto". "auto" is rejected at
 # load time if aircraft.yaml uses the external_operator release backend.
 default_release_mode: "manual"

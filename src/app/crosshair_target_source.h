@@ -23,7 +23,9 @@ public:
     CrosshairTargetSource(hal::ITelemetry& telemetry, hal::IGimbal& gimbal,
                           const core::projection::Intrinsics& intrinsics,
                           core::geodesy::EnuOrigin origin,
-                          core::terrain::DemSampleFn dem_fn);
+                          core::terrain::DemSampleFn dem_fn,
+                          std::function<core::ElevationSource(double lat_deg, double lon_deg)>
+                              elevation_source_fn = {});
 
     std::string Name() const override { return "gimbal_crosshair"; }
     bool IsAvailable() const override;
@@ -35,6 +37,11 @@ private:
     core::projection::Intrinsics intrinsics_;
     core::geodesy::EnuOrigin origin_;
     core::terrain::DemSampleFn dem_fn_;
+    // Optional refinement of the raycast's elevation source: when the
+    // raycast reports kRawDem (no LRF bias applied) this reports the more
+    // precise source the DEM backend actually used (kHomeTiedDem /
+    // kRawDem / kFlatAtHome / kUnknown). kLrfCorrected is never overridden.
+    std::function<core::ElevationSource(double, double)> elevation_source_fn_;
 };
 
 }  // namespace droppoint::app

@@ -1,356 +1,353 @@
-// psdk/telemetry_subscription.cpp
-//
-// Real aircraft telemetry via DJI PSDK Data Subscription topics.
-// Status: unverified — compiles against real headers, needs hardware to verify.
+// psdk/telemetry_subscription.cpp — see header.
+// Status: unverified — requires hardware.
 #include "telemetry_subscription.h"
 
-#include <cmath>
-#include <cstring>
+#include <dji_fc_subscription.h>
+#include <dji_typedef.h>
+#include <dji_widget.h>
 
-#include "core/atmosphere.h"
-#include "core/math_constants.h"
-#include "core/wind.h"
-#include "psdk_util.h"
+#include <chrono>
+#include <cmath>
+#include <stdexcept>
+
+#include "hw/conversions.h"
 #include "util/logging.h"
 
-#include "dji_fc_subscription.h"
+// Pin the numeric values the DJI-free hw/conversions tables rely on, so a
+// PSDK update that renumbers them fails here at compile time, not in the
+// air.
+static_assert(DJI_FC_SUBSCRIPTION_POSITION_SOLUTION_PROPERTY_NARROW_INT == 50,
+              "RTK fix property changed; update hw/conversions.cpp");
+static_assert(DJI_FC_SUBSCRIPTION_POSITION_SOLUTION_PROPERTY_FLOAT_L1_AMBIGUITY == 32 &&
+                  DJI_FC_SUBSCRIPTION_POSITION_SOLUTION_PROPERTY_FLOAT_IONOSPHERIC_FREE_AMBIGUITY ==
+                      33 &&
+                  DJI_FC_SUBSCRIPTION_POSITION_SOLUTION_PROPERTY_FLOAT_SOLUTION == 34,
+              "RTK float property values changed; update hw/conversions.cpp");
+static_assert(DJI_FC_SUBSCRIPTION_FLIGHT_STATUS_STOPED == 0 &&
+                  DJI_FC_SUBSCRIPTION_FLIGHT_STATUS_ON_GROUND == 1 &&
+                  DJI_FC_SUBSCRIPTION_FLIGHT_STATUS_IN_AIR == 2,
+              "flight status enum changed; update telemetry_subscription.cpp");
+static_assert(DJI_AIRCRAFT_TYPE_M300_RTK == 60 && DJI_AIRCRAFT_TYPE_M350_RTK == 89 &&
+                  DJI_AIRCRAFT_TYPE_M30 == 67 && DJI_AIRCRAFT_TYPE_M30T == 68 &&
+                  DJI_AIRCRAFT_TYPE_M3E == 77 && DJI_AIRCRAFT_TYPE_M3T == 79 &&
+                  DJI_AIRCRAFT_TYPE_M4T == 99 && DJI_AIRCRAFT_TYPE_M4E == 990 &&
+                  DJI_AIRCRAFT_TYPE_M4TD == 100 && DJI_AIRCRAFT_TYPE_M4D == 1000 &&
+                  DJI_AIRCRAFT_TYPE_M400 == 103,
+              "aircraft type enum changed; update hw/conversions.cpp");
+static_assert(DJI_WIDGET_TYPE_BUTTON == 1 && DJI_WIDGET_TYPE_SWITCH == 2 &&
+                  DJI_WIDGET_TYPE_SCALE == 3 && DJI_WIDGET_TYPE_LIST == 4 &&
+                  DJI_WIDGET_TYPE_INT_INPUT_BOX == 5,
+              "widget type enum changed; update hw/widget_map.h");
+static_assert(DJI_WIDGET_BUTTON_STATE_PRESS_DOWN == 1 && DJI_WIDGET_BUTTON_STATE_RELEASE_UP == 0,
+              "widget button state enum changed; update hw/widget_map.h");
 
 namespace droppoint::psdk {
 
 namespace {
 
-// The PSDK subscription callback signature has no user-data argument, so a
-// single static pointer points to the active instance. This is safe because
-// DropPoint creates exactly one TelemetrySubscription per process.
-TelemetrySubscription* g_instance = nullptr;
-
-std::uint64_t DjiTimestampToUs(const T_DjiDataTimestamp* ts) {
-    if (!ts) return 0;
-    return static_cast<std::uint64_t>(ts->millisecond) * 1000ULL +
-           static_cast<std::uint64_t>(ts->microsecond);
+constexpr std::uint64_t PackDjiTs(const T_DjiDataTimestamp& ts) {
+    // ~17.5 min of microsecond resolution per wrap; only equality matters.
+    return (static_cast<std::uint64_t>(ts.millisecond) << 20) |
+           (static_cast<std::uint64_t>(ts.microsecond) & 0xFFFFF);
 }
 
-extern "C" T_DjiReturnCode QuaternionCallback(const uint8_t* data, uint16_t dataSize,
-                                               const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionQuaternion)) return DJI_RETURN_CODE_OK;
-    const auto* q = reinterpret_cast<const T_DjiFcSubscriptionQuaternion*>(data);
-    g_instance->OnQuaternion(*q, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
+bool QuaternionIsSane(const T_DjiFcSubscriptionQuaternion& q) {
+    const double n = static_cast<double>(q.q0) * q.q0 + static_cast<double>(q.q1) * q.q1 +
+                     static_cast<double>(q.q2) * q.q2 + static_cast<double>(q.q3) * q.q3;
+    return std::isfinite(n) && n > 1e-6;
 }
 
-extern "C" T_DjiReturnCode VelocityCallback(const uint8_t* data, uint16_t dataSize,
-                                            const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionVelocity)) return DJI_RETURN_CODE_OK;
-    const auto* v = reinterpret_cast<const T_DjiFcSubscriptionVelocity*>(data);
-    g_instance->OnVelocity(*v, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode PositionFusedCallback(const uint8_t* data, uint16_t dataSize,
-                                                 const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionPositionFused)) return DJI_RETURN_CODE_OK;
-    const auto* p = reinterpret_cast<const T_DjiFcSubscriptionPositionFused*>(data);
-    g_instance->OnPositionFused(*p, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode AltitudeFusedCallback(const uint8_t* data, uint16_t dataSize,
-                                                 const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionAltitudeFused)) return DJI_RETURN_CODE_OK;
-    const auto* a = reinterpret_cast<const T_DjiFcSubscriptionAltitudeFused*>(data);
-    g_instance->OnAltitudeFused(*a, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode AccelerationGroundCallback(const uint8_t* data, uint16_t dataSize,
-                                                       const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionAccelerationGround)) return DJI_RETURN_CODE_OK;
-    const auto* a = reinterpret_cast<const T_DjiFcSubscriptionAccelerationGround*>(data);
-    g_instance->OnAccelerationGround(*a, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode GpsDetailsCallback(const uint8_t* data, uint16_t dataSize,
-                                              const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionGpsDetails)) return DJI_RETURN_CODE_OK;
-    const auto* d = reinterpret_cast<const T_DjiFcSubscriptionGpsDetails*>(data);
-    g_instance->OnGpsDetails(*d, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode RtkPositionCallback(const uint8_t* data, uint16_t dataSize,
-                                               const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionRtkPosition)) return DJI_RETURN_CODE_OK;
-    const auto* p = reinterpret_cast<const T_DjiFcSubscriptionRtkPosition*>(data);
-    g_instance->OnRtkPosition(*p, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode RtkYawCallback(const uint8_t* data, uint16_t dataSize,
-                                          const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionRtkYaw)) return DJI_RETURN_CODE_OK;
-    const auto* y = reinterpret_cast<const T_DjiFcSubscriptionRtkYaw*>(data);
-    g_instance->OnRtkYaw(*y, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode GimbalAnglesCallback(const uint8_t* data, uint16_t dataSize,
-                                                const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiVector3f)) return DJI_RETURN_CODE_OK;
-    const auto* angles = reinterpret_cast<const T_DjiVector3f*>(data);
-    g_instance->OnGimbalAngles(*angles, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
-}
-
-extern "C" T_DjiReturnCode RcCallback(const uint8_t* data, uint16_t dataSize,
-                                    const T_DjiDataTimestamp* timestamp) {
-    if (!g_instance || dataSize < sizeof(T_DjiFcSubscriptionRC)) return DJI_RETURN_CODE_OK;
-    const auto* rc = reinterpret_cast<const T_DjiFcSubscriptionRC*>(data);
-    g_instance->OnRc(*rc, DjiTimestampToUs(timestamp));
-    return DJI_RETURN_CODE_OK;
+const char* TopicName(E_DjiFcSubscriptionTopic topic) {
+    switch (topic) {
+        case DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION: return "QUATERNION";
+        case DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY: return "VELOCITY";
+        case DJI_FC_SUBSCRIPTION_TOPIC_POSITION_FUSED: return "POSITION_FUSED";
+        case DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES: return "GIMBAL_ANGLES";
+        case DJI_FC_SUBSCRIPTION_TOPIC_STATUS_FLIGHT: return "STATUS_FLIGHT";
+        case DJI_FC_SUBSCRIPTION_TOPIC_RTK_POSITION_INFO: return "RTK_POSITION_INFO";
+        case DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_OF_HOMEPOINT: return "ALTITUDE_OF_HOMEPOINT";
+        case DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_BAROMETER: return "ALTITUDE_BAROMETER";
+        default: return "?";
+    }
 }
 
 }  // namespace
 
-TelemetrySubscription::TelemetrySubscription(const util::config::AircraftConfig& aircraft_cfg,
-                                             const util::config::SystemConfig& system_cfg,
-                                             SharedEnuOrigin origin)
-    : aircraft_cfg_(aircraft_cfg), system_cfg_(system_cfg), origin_(std::move(origin)) {
-    if (g_instance) {
-        throw std::runtime_error("only one TelemetrySubscription may exist per process");
-    }
-    g_instance = this;
-
-    CheckReturn(DjiFcSubscription_Init(), "DjiFcSubscription_Init");
-
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 QuaternionCallback),
-                "subscribe QUATERNION");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 VelocityCallback),
-                "subscribe VELOCITY");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_POSITION_FUSED,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 PositionFusedCallback),
-                "subscribe POSITION_FUSED");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_FUSED,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 AltitudeFusedCallback),
-                "subscribe ALTITUDE_FUSED");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_ACCELERATION_GROUND,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 AccelerationGroundCallback),
-                "subscribe ACCELERATION_GROUND");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GPS_DETAILS,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_5_HZ,
-                                                 GpsDetailsCallback),
-                "subscribe GPS_DETAILS");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_RTK_POSITION,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_5_HZ,
-                                                 RtkPositionCallback),
-                "subscribe RTK_POSITION");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_RTK_YAW,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_5_HZ,
-                                                 RtkYawCallback),
-                "subscribe RTK_YAW");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ,
-                                                 GimbalAnglesCallback),
-                "subscribe GIMBAL_ANGLES");
-    CheckReturn(DjiFcSubscription_SubscribeTopic(DJI_FC_SUBSCRIPTION_TOPIC_RC,
-                                                 DJI_DATA_SUBSCRIPTION_TOPIC_10_HZ,
-                                                 RcCallback),
-                "subscribe RC");
-
-    DP_LOG_INFO("telemetry_subscription", "subscribed to PSDK FC topics");
-}
-
-TelemetrySubscription::~TelemetrySubscription() {
-    DjiFcSubscription_DeInit();
-    g_instance = nullptr;
-}
-
-void TelemetrySubscription::UpdateOriginLocked(const core::LatLonAlt& lla) {
-    if (!origin_ || origin_->lla.lat_deg != 0.0) return;  // already set
-    *origin_ = core::geodesy::MakeEnuOrigin(lla);
-    DP_LOG_INFO("telemetry_subscription",
-                std::string("set ENU origin to ") + std::to_string(lla.lat_deg) + ", " +
-                    std::to_string(lla.lon_deg));
-}
-
-core::AircraftState TelemetrySubscription::BuildAircraftStateLocked() const {
-    core::AircraftState state{};
-    state.timestamp_us = last_update_us_;
-    state.geodetic = geodetic_;
-
-    if (origin_ && origin_->lla.lat_deg != 0.0) {
-        state.position = core::geodesy::LlaToEnu(geodetic_, *origin_);
+void PsdkTelemetry::Init() {
+    T_DjiReturnCode ret = DjiFcSubscription_Init();
+    if (ret != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+        throw std::runtime_error("DjiFcSubscription_Init failed");
     }
 
-    state.velocity = velocity_;
+    struct Plan {
+        E_DjiFcSubscriptionTopic topic;
+        bool required;
+        bool* flag;
+    };
+    const Plan plan[] = {
+        {DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION, true, &sub_quaternion_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY, true, &sub_velocity_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_POSITION_FUSED, true, &sub_position_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES, true, &sub_gimbal_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_STATUS_FLIGHT, false, &sub_flight_status_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_RTK_POSITION_INFO, false, &sub_rtk_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_OF_HOMEPOINT, false, &sub_home_alt_},
+        {DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_BAROMETER, false, &sub_baro_},
+    };
 
-    if (have_quat_ && origin_ && origin_->lla.lat_deg != 0.0) {
-        const core::AircraftState attitude_state = QuaternionToEnu(quat_, *origin_);
-        state.yaw_rad = attitude_state.yaw_rad;
-        state.pitch_rad = attitude_state.pitch_rad;
-        state.roll_rad = attitude_state.roll_rad;
+    for (const auto& p : plan) {
+        ret = DjiFcSubscription_SubscribeTopic(p.topic, DJI_DATA_SUBSCRIPTION_TOPIC_50_HZ, nullptr);
+        if (ret != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS && p.required) {
+            DP_LOG_WARN("telemetry", std::string("topic ") + TopicName(p.topic) +
+                                        " rejected 50 Hz, retrying at 10 Hz");
+            ret = DjiFcSubscription_SubscribeTopic(p.topic, DJI_DATA_SUBSCRIPTION_TOPIC_10_HZ,
+                                                   nullptr);
+        } else if (ret != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            // Optional topic: single attempt at 10 Hz keeps the freq-type
+            // count low (PSDK allows at most 4 distinct frequencies).
+            ret = DjiFcSubscription_SubscribeTopic(p.topic, DJI_DATA_SUBSCRIPTION_TOPIC_10_HZ,
+                                                   nullptr);
+        }
+        *p.flag = (ret == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS);
+        if (!*p.flag) {
+            if (p.required) {
+                throw std::runtime_error(std::string("required telemetry topic ") +
+                                         TopicName(p.topic) +
+                                         " could not be subscribed at 50 or 10 Hz");
+            }
+            DP_LOG_WARN("telemetry", std::string("optional topic ") + TopicName(p.topic) +
+                                        " unavailable — continuing without it");
+        }
+    }
+    last_fresh_us_ = NowUs();
+}
+
+std::vector<PsdkTelemetry::TopicStatusEntry> PsdkTelemetry::TopicStatus() const {
+    struct Row {
+        const char* name;
+        bool ok;
+        bool required;
+        int hz;
+    };
+    const Row rows[] = {
+        {"QUATERNION", sub_quaternion_, true, 50},
+        {"VELOCITY", sub_velocity_, true, 50},
+        {"POSITION_FUSED", sub_position_, true, 50},
+        {"GIMBAL_ANGLES", sub_gimbal_, true, 50},
+        {"STATUS_FLIGHT", sub_flight_status_, false, 10},
+        {"RTK_POSITION_INFO", sub_rtk_, false, 10},
+        {"ALTITUDE_OF_HOMEPOINT", sub_home_alt_, false, 10},
+        {"ALTITUDE_BAROMETER", sub_baro_, false, 10},
+    };
+    std::vector<TopicStatusEntry> out;
+    for (const auto& r : rows) {
+        out.push_back({r.name, r.ok, r.ok ? r.hz : 0, r.required});
+    }
+    return out;
+}
+
+std::uint64_t PsdkTelemetry::NowUs() const {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+
+void PsdkTelemetry::Poll() {
+    const std::uint64_t now_us = NowUs();
+    bool fresh = false;
+    bool have_position = false;
+    core::LatLonAlt lla{};
+    int sats = 0;
+    bool velocity_ok = false;
+    core::EnuVector vel{};
+    bool quat_ok = false;
+    hw::conv::AttitudeRad att{};
+
+    if (sub_quaternion_) {
+        T_DjiFcSubscriptionQuaternion q{};
+        T_DjiDataTimestamp ts{};
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_QUATERNION,
+                                                    reinterpret_cast<uint8_t*>(&q), sizeof(q),
+                                                    &ts) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS &&
+            QuaternionIsSane(q)) {
+            att = hw::conv::QuaternionFrdNedToEuler(q.q0, q.q1, q.q2, q.q3);
+            quat_ok = std::isfinite(att.heading_rad);
+            const std::uint64_t packed = PackDjiTs(ts);
+            if (packed != last_quat_dji_ts_) {
+                last_quat_dji_ts_ = packed;
+                fresh = true;
+            }
+        }
     }
 
-    state.valid = origin_ && origin_->lla.lat_deg != 0.0 && have_quat_ && last_update_us_ > 0;
-    return state;
-}
-
-core::AircraftState TelemetrySubscription::GetAircraftState() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return BuildAircraftStateLocked();
-}
-
-hal::GnssStatus TelemetrySubscription::GetGnssStatus() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    hal::GnssStatus status{};
-    if (have_gps_details_) {
-        status.satellite_count = static_cast<int>(gps_details_.totalSatelliteNumberUsed);
+    if (sub_velocity_) {
+        T_DjiFcSubscriptionVelocity v{};
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_VELOCITY,
+                                                    reinterpret_cast<uint8_t*>(&v), sizeof(v),
+                                                    nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS &&
+            v.health == DJI_FC_SUBSCRIPTION_DATA_HEALTH) {
+            vel = hw::conv::NeuToEnu(v.data.x, v.data.y, v.data.z);
+            velocity_ok = true;
+        }
     }
-    status.rtk_connected = have_rtk_position_;
-    status.rtk_status = rtk_fix_ ? hal::RtkFixStatus::kFix : hal::RtkFixStatus::kNotAvailable;
-    return status;
-}
 
-double TelemetrySubscription::GetBarometricAltitudeM() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (have_altitude_) return static_cast<double>(altitude_fused_m_);
-    return 0.0;
-}
+    if (sub_position_) {
+        T_DjiFcSubscriptionPositionFused pos{};
+        T_DjiDataTimestamp ts{};
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_POSITION_FUSED,
+                                                    reinterpret_cast<uint8_t*>(&pos), sizeof(pos),
+                                                    &ts) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            lla.lat_deg = hw::conv::RadToDeg(pos.latitude);
+            lla.lon_deg = hw::conv::RadToDeg(pos.longitude);
+            lla.alt_m_hae = pos.altitude;
+            sats = pos.visibleSatelliteNumber;
+            have_position = sats > 0;
+            const std::uint64_t packed = PackDjiTs(ts);
+            if (packed != last_pos_dji_ts_) {
+                last_pos_dji_ts_ = packed;
+                fresh = true;
+            }
+        }
+    }
 
-std::uint64_t TelemetrySubscription::GetTelemetryAgeUs() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const std::uint64_t now = MonotonicUs();
-    return (last_update_us_ <= now) ? (now - last_update_us_) : 0;
-}
+    if (sub_gimbal_) {
+        T_DjiFcSubscriptionGimbalAngles g{};
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES,
+                                                    reinterpret_cast<uint8_t*>(&g), sizeof(g),
+                                                    nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            std::lock_guard<std::mutex> lock(mu_);
+            gimbal_.pitch_deg = g.x;
+            gimbal_.roll_deg = g.y;
+            gimbal_.yaw_deg = g.z;
+            gimbal_.timestamp_us = now_us;
+            gimbal_.valid = std::isfinite(g.x) && std::isfinite(g.y) && std::isfinite(g.z);
+        }
+    }
 
-core::WindSample TelemetrySubscription::GetWind() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const core::AircraftState state = BuildAircraftStateLocked();
-    if (!state.valid) return core::WindSample{};
+    if (sub_flight_status_) {
+        T_DjiFcSubscriptionFlightStatus fs = 0;
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_STATUS_FLIGHT,
+                                                    reinterpret_cast<uint8_t*>(&fs), sizeof(fs),
+                                                    nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            flight_status_ = static_cast<int>(fs);
+        }
+    }
 
-    // Estimate wind from hover attitude. Only meaningful in a low-speed hover.
-    core::wind::HoverEstimateInputs hover_in{};
-    hover_in.pitch_rad = state.pitch_rad;
-    hover_in.roll_rad = state.roll_rad;
-    hover_in.yaw_rad = state.yaw_rad;
-    hover_in.mass_kg = aircraft_cfg_.mass_kg;
-    hover_in.cda_airframe = aircraft_cfg_.cda_airframe;
-    hover_in.air_density_kg_m3 =
-        core::atmosphere::AtAltitude(geodetic_.alt_m_hae, 25.0).density_kg_m3;
+    if (sub_rtk_) {
+        T_DjiFcSubscriptionRtkPositionInfo info = 0;
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_RTK_POSITION_INFO,
+                                                    reinterpret_cast<uint8_t*>(&info), sizeof(info),
+                                                    nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            gnss_.rtk_status = hw::conv::RtkFixStatusFromProperty(static_cast<int>(info));
+            gnss_.rtk_connected = gnss_.rtk_status != hal::RtkFixStatus::kNotAvailable;
+        }
+    }
 
-    return core::wind::EstimateFromHover(hover_in);
-}
+    if (sub_home_alt_) {
+        T_DjiFcSubscriptionAltitudeOfHomePoint alt = 0.0f;
+        if (DjiFcSubscription_GetLatestValueOfTopic(
+                DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_OF_HOMEPOINT, reinterpret_cast<uint8_t*>(&alt),
+                sizeof(alt), nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            home_alt_m_ = static_cast<double>(alt);
+        }
+    }
 
-std::vector<hal::RcButtonEvent> TelemetrySubscription::PollRcButtonEvents() {
-    // The PSDK does not expose a native RC button API. This adapter reads RC
-    // channels, but a safe mapping from channel values/switches to the logical
-    // buttons in config/aircraft.yaml requires per-operator configuration in
-    // DJI Pilot and is left as a documented gap (docs/OPEN-QUESTIONS.md #3).
-    return {};
-}
+    if (sub_baro_) {
+        T_DjiFcSubscriptionAltitudeBarometer alt = 0.0f;
+        if (DjiFcSubscription_GetLatestValueOfTopic(DJI_FC_SUBSCRIPTION_TOPIC_ALTITUDE_BAROMETER,
+                                                    reinterpret_cast<uint8_t*>(&alt), sizeof(alt),
+                                                    nullptr) == DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
+            baro_alt_m_ = static_cast<double>(alt);
+        }
+    }
 
-void TelemetrySubscription::RegisterUpdateCallback(UpdateCallback callback) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    callbacks_.push_back(std::move(callback));
-}
+    // ENU origin latches on the first fix with >= 6 satellites.
+    if (!have_origin_ && have_position && sats >= 6) {
+        origin_lla_ = lla;
+        enu_origin_ = core::geodesy::MakeEnuOrigin(lla);
+        have_origin_ = true;
+        DP_LOG_INFO("telemetry", "ENU origin latched at lat " + std::to_string(lla.lat_deg) +
+                                     " lon " + std::to_string(lla.lon_deg));
+    }
 
-void TelemetrySubscription::NotifyCallbacksLocked(const core::AircraftState& state) {
-    for (const auto& cb : callbacks_) {
-        cb(state);
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        core::AircraftState& s = state_;
+        s.geodetic = lla;
+        if (have_origin_ && have_position) {
+            const auto enu = core::geodesy::LlaToEnu(lla, enu_origin_);
+            s.position = {enu.e, enu.n, enu.u};
+        }
+        if (velocity_ok) s.velocity = vel;
+        if (quat_ok) {
+            s.yaw_rad = hw::conv::EnuYawFromHeadingRad(att.heading_rad);
+            s.pitch_rad = att.pitch_rad;
+            s.roll_rad = att.roll_rad;
+            last_heading_rad_ = att.heading_rad;
+            attitude_ts_us_ = now_us;
+        }
+        s.valid = quat_ok && velocity_ok && have_position && have_origin_;
+        gnss_.satellite_count = sats;
+    }
+
+    if (fresh) {
+        last_fresh_us_ = now_us;
+        std::lock_guard<std::mutex> lock(mu_);
+        state_.timestamp_us = now_us;
+        if (update_cb_) update_cb_(state_);
     }
 }
 
-void TelemetrySubscription::OnQuaternion(const T_DjiFcSubscriptionQuaternion& q,
-                                         std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    quat_ = q;
-    have_quat_ = true;
-    last_update_us_ = now_us;
-
-    core::AircraftState state = BuildAircraftStateLocked();
-    NotifyCallbacksLocked(state);
+core::AircraftState PsdkTelemetry::GetAircraftState() {
+    Poll();
+    std::lock_guard<std::mutex> lock(mu_);
+    return state_;
 }
 
-void TelemetrySubscription::OnVelocity(const T_DjiFcSubscriptionVelocity& v,
-                                     std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    velocity_ = NeuToEnu(v.data);
-    last_update_us_ = now_us;
+hal::GnssStatus PsdkTelemetry::GetGnssStatus() {
+    std::lock_guard<std::mutex> lock(mu_);
+    return gnss_;
 }
 
-void TelemetrySubscription::OnPositionFused(const T_DjiFcSubscriptionPositionFused& p,
-                                          std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    core::LatLonAlt lla;
-    lla.lat_deg = static_cast<double>(p.latitude);
-    lla.lon_deg = static_cast<double>(p.longitude);
-    lla.alt_m_hae = static_cast<double>(p.altitude);
-    geodetic_ = lla;
-    UpdateOriginLocked(lla);
-    last_update_us_ = now_us;
+double PsdkTelemetry::GetBarometricAltitudeM() { return baro_alt_m_; }
+
+std::uint64_t PsdkTelemetry::GetTelemetryAgeUs() {
+    const std::uint64_t now = NowUs();
+    return now > last_fresh_us_ ? now - last_fresh_us_ : 0;
 }
 
-void TelemetrySubscription::OnAltitudeFused(const float altitude_m, std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    altitude_fused_m_ = altitude_m;
-    have_altitude_ = true;
-    last_update_us_ = now_us;
+core::WindSample PsdkTelemetry::GetWind() {
+    core::WindSample w;
+    w.valid = false;  // no PSDK wind topic — the app-level estimator handles it
+    return w;
 }
 
-void TelemetrySubscription::OnAccelerationGround(const T_DjiVector3f& a,
-                                                  std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    acceleration_ground_ = a;
-    have_acceleration_ = true;
-    last_update_us_ = now_us;
+std::vector<hal::RcButtonEvent> PsdkTelemetry::PollRcButtonEvents() { return {}; }
+
+void PsdkTelemetry::RegisterUpdateCallback(UpdateCallback callback) {
+    std::lock_guard<std::mutex> lock(mu_);
+    update_cb_ = std::move(callback);
 }
 
-void TelemetrySubscription::OnGpsDetails(const T_DjiFcSubscriptionGpsDetails& d,
-                                         std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    gps_details_ = d;
-    have_gps_details_ = true;
-    last_update_us_ = now_us;
+bool PsdkTelemetry::HasEnuOrigin() const { return have_origin_; }
+core::LatLonAlt PsdkTelemetry::EnuOriginLla() const { return origin_lla_; }
+
+PsdkTelemetry::GimbalAngles PsdkTelemetry::LatestGimbalAngles() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return gimbal_;
 }
 
-void TelemetrySubscription::OnRtkPosition(const T_DjiFcSubscriptionRtkPosition& p,
-                                          std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    rtk_position_ = p;
-    have_rtk_position_ = true;
-    last_update_us_ = now_us;
+std::uint64_t PsdkTelemetry::AttitudeTimestampUs() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return attitude_ts_us_;
+}
+double PsdkTelemetry::AircraftHeadingRad() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return last_heading_rad_;
 }
 
-void TelemetrySubscription::OnRtkYaw(const std::int16_t yaw_cdeg, std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    (void)yaw_cdeg;
-    have_rtk_yaw_ = true;
-    last_update_us_ = now_us;
-}
-
-void TelemetrySubscription::OnGimbalAngles(const T_DjiVector3f& angles,
-                                           std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    (void)angles;
-    (void)now_us;
-    // Gimbal angles are exposed through IGimbal (gimbal_psdk.cpp), not here,
-    // because the guidance loop consumes gimbal state separately from aircraft
-    // state. Storing them would couple the two adapters.
-}
-
-void TelemetrySubscription::OnRc(const T_DjiFcSubscriptionRC& rc, std::uint64_t now_us) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    last_rc_ = rc;
-    have_rc_ = true;
-    last_update_us_ = now_us;
-    (void)now_us;
-}
+std::optional<int> PsdkTelemetry::LatestFlightStatus() const { return flight_status_; }
+std::optional<double> PsdkTelemetry::LatestHomeAltitudeM() const { return home_alt_m_; }
 
 }  // namespace droppoint::psdk

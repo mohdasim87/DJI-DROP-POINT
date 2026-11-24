@@ -201,6 +201,7 @@ const char* FailureToString(RaycastFailure failure) {
         case RaycastFailure::kRayAboveHorizon: return "ray above horizon";
         case RaycastFailure::kNoDemTile: return "no DEM tile";
         case RaycastFailure::kNoTerrainIntersection: return "no terrain intersection";
+        case RaycastFailure::kInvalidGimbalAttitude: return "invalid gimbal attitude";
     }
     return "unknown";
 }

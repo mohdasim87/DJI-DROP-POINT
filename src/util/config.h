@@ -33,13 +33,15 @@ enum class PsdkLinkMode {
     kOnlyNetwork,
 };
 enum class PsdkPlatform { kGenericLinux, kManifold3 };
-enum class ReleaseBackend { kPwmServo, kExternalOperator };
+enum class ReleaseBackend { kPwmServo, kExternalOperator, kPsdkWidget };
 enum class DefaultReleaseMode { kManual, kAuto };
 
 // The `release:` map in aircraft.yaml: how the payload release mechanism is
 // driven. pwm_servo is a locally-actuated PWM output DropPoint controls;
 // external_operator is a third-party kit (e.g. CZI TH2/TH4) the operator
-// triggers in DJI Pilot — auto release is unavailable with that backend.
+// triggers in DJI Pilot — auto release is unavailable with that backend;
+// psdk_widget presses another payload's drop widget through the PSDK Widget
+// Manager (Matrice 400 only, see docs/CZI-DROP-KITS.md).
 struct ReleaseConfig {
     ReleaseBackend backend = ReleaseBackend::kPwmServo;
     std::string description;
@@ -51,6 +53,14 @@ struct ReleaseConfig {
     int period_ns = 20000000;
     int safe_pulse_ns = 1000000;
     int release_pulse_ns = 2000000;
+
+    // Widget Manager target, under `release.widget` (psdk_widget backend
+    // only): which widget on the OTHER payload (e.g. the CZI TH4) to set.
+    int widget_mount_position = 0;  // E_DjiMountPosition of the drop kit
+    int widget_index = 0;
+    std::string widget_type = "button";  // "button" | "switch"
+    int widget_fire_value = 1;
+    int widget_safe_value = 0;
 };
 
 struct AircraftConfig {
@@ -67,6 +77,11 @@ struct AircraftConfig {
     bool advanced_features = false;   // DJI advanced permission features available
     bool liveview_marker = false;
     std::string uart_device = "/dev/ttyUSB0";
+    // USB-serial adapter identity reported to the FC (see
+    // docs/CZI-DROP-KITS.md: M400 E-Port V2 has no UART pins). Defaults are
+    // the ubiquitous FTDI FT232.
+    int uart_usb_vid = 0x0403;
+    int uart_usb_pid = 0x6001;
     int camera_mount_position = 1;
     PsdkLinkMode psdk_link_mode = PsdkLinkMode::kOnlyUart;
     int baud_rate = 921600;
@@ -101,6 +116,10 @@ struct SystemConfig {
     double wind_min_hover_s = 3.0;
     double wind_max_age_s = 300.0;
     bool allow_flat_terrain_fallback = true;
+    // terrain.allow_raw_dem: permit raw (untied, EGM96) DEM elevations when
+    // no home tie exists. Default false — a raw SRTM height can be tens of
+    // metres off the WGS-84 ellipsoid altitude the aircraft reports.
+    bool allow_raw_dem = false;
     DefaultReleaseMode default_release_mode = DefaultReleaseMode::kManual;
 };
 

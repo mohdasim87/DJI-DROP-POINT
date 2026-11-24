@@ -66,8 +66,11 @@ PsdkPlatform ParsePsdkPlatform(const std::string& s, const std::string& context)
 ReleaseBackend ParseReleaseBackend(const std::string& s, const std::string& context) {
     if (s == "pwm_servo") return ReleaseBackend::kPwmServo;
     if (s == "external_operator") return ReleaseBackend::kExternalOperator;
-    throw ConfigError(context +
-                      ": release.backend must be 'pwm_servo' or 'external_operator', got '" + s + "'");
+    if (s == "psdk_widget") return ReleaseBackend::kPsdkWidget;
+    throw ConfigError(
+        context +
+        ": release.backend must be 'pwm_servo', 'external_operator' or 'psdk_widget', got '" + s +
+        "'");
 }
 
 DefaultReleaseMode ParseDefaultReleaseMode(const std::string& s, const std::string& context) {
@@ -108,6 +111,8 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
     cfg.advanced_features = OptionalField(root, "advanced_features", false);
     cfg.liveview_marker = OptionalField(root, "liveview_marker", false);
     cfg.uart_device = OptionalField<std::string>(root, "uart_device", "/dev/ttyUSB0");
+    cfg.uart_usb_vid = OptionalField(root, "uart_usb_vid", 0x0403);
+    cfg.uart_usb_pid = OptionalField(root, "uart_usb_pid", 0x6001);
     cfg.camera_mount_position = OptionalField(root, "camera_mount_position", 1);
     cfg.psdk_link_mode =
         ParseLinkMode(OptionalField<std::string>(root, "psdk_link_mode", "only_uart"), ctx);
@@ -129,6 +134,23 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
             cfg.release.safe_pulse_ns = OptionalField(pwm, "safe_pulse_ns", cfg.release.safe_pulse_ns);
             cfg.release.release_pulse_ns = OptionalField(pwm, "release_pulse_ns", cfg.release.release_pulse_ns);
         }
+        if (r["widget"]) {
+            const YAML::Node w = r["widget"];
+            const std::string wctx = rctx + " (widget)";
+            cfg.release.widget_mount_position = RequireField<int>(w, "mount_position", wctx);
+            cfg.release.widget_index = RequireField<int>(w, "index", wctx);
+            cfg.release.widget_type = OptionalField<std::string>(w, "type", cfg.release.widget_type);
+            cfg.release.widget_fire_value = OptionalField(w, "fire_value", cfg.release.widget_fire_value);
+            cfg.release.widget_safe_value = OptionalField(w, "safe_value", cfg.release.widget_safe_value);
+            if (cfg.release.widget_type != "button" && cfg.release.widget_type != "switch") {
+                throw ConfigError(wctx + ": type must be 'button' or 'switch', got '" +
+                                  cfg.release.widget_type + "'");
+            }
+        }
+        if (cfg.release.backend == ReleaseBackend::kPsdkWidget && !r["widget"]) {
+            throw ConfigError(rctx + ": backend 'psdk_widget' requires a release.widget map "
+                              "(mount_position, index, type) — see docs/CZI-DROP-KITS.md");
+        }
     }
 
     bool known_model = false;
@@ -144,6 +166,12 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
     if (cfg.cda_airframe <= 0.0) throw ConfigError(ctx + ": cda_airframe must be positive");
     if (cfg.max_payload_kg <= 0.0) throw ConfigError(ctx + ": max_payload_kg must be positive");
     if (cfg.release.hold_s <= 0.0) throw ConfigError(ctx + ": release.hold_s must be positive");
+    // The Widget Manager (control of another payload's widgets) is only
+    // available on the Matrice 400 — see docs/CZI-DROP-KITS.md.
+    if (cfg.release.backend == ReleaseBackend::kPsdkWidget && cfg.model != "M400") {
+        throw ConfigError(ctx + ": release.backend 'psdk_widget' is only valid for model 'M400', got '" +
+                          cfg.model + "'");
+    }
     return cfg;
 }
 
@@ -260,6 +288,10 @@ SystemConfig LoadSystemConfig(const std::string& path) {
     cfg.wind_alpha = OptionalField(root, "wind_alpha", cfg.wind_alpha);
     cfg.allow_flat_terrain_fallback =
         OptionalField(root, "allow_flat_terrain_fallback", cfg.allow_flat_terrain_fallback);
+    if (root["terrain"]) {
+        cfg.allow_raw_dem =
+            OptionalField(root["terrain"], "allow_raw_dem", cfg.allow_raw_dem);
+    }
     cfg.default_release_mode = ParseDefaultReleaseMode(
         OptionalField<std::string>(root, "default_release_mode", "manual"), ctx);
 

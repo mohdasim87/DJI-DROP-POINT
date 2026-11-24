@@ -1,40 +1,32 @@
 // psdk/gimbal_psdk.h
 //
-// Gimbal control and attitude readback via DJI PSDK GimbalManager and the
-// FC-subscription gimbal-angles topic. Status: unverified.
+// Status: unverified — requires hardware.
+//
+// hal::IGimbal backed by the GIMBAL_ANGLES subscription topic polled by
+// PsdkTelemetry (basic subscription is the only camera-adjacent data a
+// third-party companion gets on the M4T and M400 — Gimbal Manager is an
+// advanced feature, see docs/CZI-DROP-KITS.md). SlewRate()/Reset() are
+// no-ops: the operator aims the camera with the RC, exactly as in the sim.
 #pragma once
 
-#include <mutex>
-
-#include "core/solution.h"
 #include "hal/i_gimbal.h"
 #include "util/config.h"
 
-#include "dji_typedef.h"
-
 namespace droppoint::psdk {
 
-// Consumes the latest gimbal angles, which are produced by the PSDK
-// telemetry subscription callback. The telemetry adapter is the only place
-// that can subscribe to DJI_FC_SUBSCRIPTION_TOPIC_GIMBAL_ANGLES.
-class GimbalPsdk : public hal::IGimbal {
+class PsdkTelemetry;
+
+class PsdkGimbal : public hal::IGimbal {
 public:
-    explicit GimbalPsdk(util::config::GimbalYawSource yaw_source);
-    ~GimbalPsdk() override;
+    PsdkGimbal(PsdkTelemetry& telemetry, util::config::GimbalYawSource yaw_source);
 
-    // Called by TelemetrySubscription whenever fresh gimbal angles arrive.
-    void UpdateAngles(const T_DjiVector3f& angles_deg);
-
-    // IGimbal implementation.
     core::GimbalState GetAttitude() override;
     void SlewRate(double pitch_rate_norm, double yaw_rate_norm) override;
     void Reset() override;
 
 private:
-    util::config::GimbalYawSource yaw_source_;
-    std::mutex mutex_;
-    core::GimbalState latest_{};
-    std::uint64_t timestamp_us_ = 0;
+    PsdkTelemetry& telemetry_;
+    bool yaw_is_aircraft_;
 };
 
 }  // namespace droppoint::psdk

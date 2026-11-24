@@ -2,63 +2,53 @@
 
 This is the **only** directory in the repository allowed to include a DJI
 Payload-SDK header. Everything here implements the `hal/i_*.h` interfaces
-against real hardware; `core/`, `hal/`, `sim/`, and `app/` never reference
-anything in this directory or in DJI's headers.
+against real hardware; `core/`, `hal/`, `sim/`, `app/` and `hw/` never
+reference anything in this directory or in DJI's headers.
 
 ## Status
 
-**Not built by default** (`DROPPOINT_BUILD_PSDK=OFF`). This target requires:
+**Not built by default** (`DROPPOINT_BUILD_PSDK=OFF`). The PSDK adapter
+library compiles wherever the headers are available, but the executable,
+the DJI sample platform sources and the `libpayloadsdk.a` link are
+**Linux only** — the CMake file skips them with a message on other hosts.
 
-1. The `aarch64-linux-gnu-gcc`/`g++` cross toolchain (or building natively on
-   the aarch64 companion computer).
-2. The vendored Payload-SDK static library, expected at the path set by
-   `DROPPOINT_PSDK_ROOT` (default `../psdk-upstream`). On Linux the CMake build
-   links the correct `libpayloadsdk.a` for the target processor automatically.
-3. Real DJI developer credentials in `config/credentials.yaml` (never
-   committed; see `config/credentials.example.yaml`).
-
-None of the above is available in this development environment, per hard
-constraints 2 and 3 in the build spec. The files here compile against the real
-PSDK headers found in `D:\DJI Payload\psdk-upstream`, but they have never run
-against an aircraft. Every function is marked with a
-`Status: unverified — requires hardware` comment.
+None of this code has run against an aircraft. Every file is marked
+`Status: unverified — requires hardware`. The `--selftest --no-link` and
+`--version` paths are what CI and the install test exercise; everything
+else awaits bench time.
 
 ## Layout
 
 | File | HAL interface | PSDK surface used | Status |
 |---|---|---|---|
-| `release_gpio.{h,cpp}` | `hal::IRelease` | **not PSDK** — Linux sysfs PWM directly, see docs/OPEN-QUESTIONS.md #4 | Implemented; unverified without hardware |
-| `app_registration.{h,cpp}` | — | `T_DjiUserInfo` credential struct wiring, reads `config/credentials.yaml` | Implemented (loader + tests); `DjiCore_Init` wiring is in `main_psdk.cpp` |
-| `telemetry_subscription.*` | `hal::ITelemetry` | `dji_fc_subscription.h` topics | Implemented; unverified |
-| `gimbal_psdk.*` | `hal::IGimbal` | `dji_gimbal_manager.h`, subscription `..._GIMBAL_ANGLES` | Implemented; unverified |
-| `rangefinder_camera_manager.*` | `hal::IRangefinder` | `DjiCameraManager_GetLaserRangingInfo` | Implemented; unverified |
-| `display_floating_window.*` | `hal::IDisplay` | `DjiWidgetFloatingWindow_ShowMessage` | Implemented; unverified |
-| `audio_speaker.*` | `hal::IAudio` | `DjiWidget_RegSpeakerHandler` | Implemented; unverified |
-| `liveview_marker.*` | `hal::ILiveview` | `DjiLiveview_SendAiMetaToPilot` (Manifold 3 only) | Implemented; unverified |
-| `platform_linux.*` | — | `dji_platform.h` HAL registration (UART/USB-bulk transport) | Implemented; unverified |
-| `main_psdk.cpp` | — | `DjiCore_Init`, `DjiCore_ApplicationStart` | Implemented; unverified |
-| Crosshair target source | `hal::ITargetSource` | Source B (gimbal centre raycast) | Implemented in `app/`; unverified |
+| `app_registration.{h,cpp}` | — | `T_DjiUserInfo` wiring, reads credentials.yaml | Implemented + unit-tested (loader only) |
+| `hal_uart.{h,cpp}` | — | `T_DjiHalUartHandler` — termios UART, device path + VID/PID from aircraft.yaml | Implemented; unverified |
+| `platform_linux.{h,cpp}` | — | `DjiPlatform_Reg*Handler`: DJI osal/osal_fs/osal_socket + our UART or DJI manifold3 `hal_usb_bulk.c` per `psdk_link_mode` | Implemented; unverified |
+| `telemetry_subscription.{h,cpp}` | `hal::ITelemetry` | `dji_fc_subscription.h`, polled `GetLatestValueOfTopic` | Implemented; unverified |
+| `gimbal_psdk.{h,cpp}` | `hal::IGimbal` | GIMBAL_ANGLES topic via the telemetry poll (no Gimbal Manager) | Implemented; unverified |
+| `rangefinder_camera_manager.{h,cpp}` | `hal::IRangefinder` | `DjiCameraManager_GetLaserRangingInfo` (advanced features only) + `NullRangefinder` | Implemented; unverified |
+| `display_floating_window.{h,cpp}` | `hal::IDisplay` | `DjiWidgetFloatingWindow_ShowMessage` | Implemented; unverified |
+| `audio_hms.{h,cpp}` | `hal::IAudio` | `DjiHmsCustomization_AlarmEnhancedCtrl` (Manifold 3 only) | Implemented; unverified |
+| `widget_bridge.{h,cpp}` | — | `DjiWidget_*`: own Pilot 2 widget registration → `hw::OperatorInputs` | Implemented; unverified |
+| `release_widget.{h,cpp}` | `hal::IRelease` | `DjiWidgetManager_SetWidgetState` — presses the drop kit's own widget (M400 only) | Implemented; unverified |
+| `probe_widgets.{h,cpp}` | — | `DjiWidgetManager_*` file list/download/state subscribe for `--probe-widgets` | Implemented; unverified |
+| `selftest.{h,cpp}` | — | report builder for `--selftest [--no-link]` | Implemented; unverified |
+| `main_psdk.cpp` | — | `DjiCore_Init`/`ApplicationStart`, arg + path resolution, guidance loop wiring, sd_notify | Implemented; unverified |
+| PWM servo release | `hal::IRelease` | **not PSDK** — sysfs PWM, lives in `src/hw/pwm_servo_release.*` | Implemented + unit-tested |
+| Liveview markers | `hal::ILiveview` | none — liveview is an advanced feature; `hw::NullLiveview` always used | Intentionally absent |
 | Pilot Pin Point target source | `hal::ITargetSource` | **does not exist in public PSDK** | Not implementable, see docs/OPEN-QUESTIONS.md #1 |
-
-`release_gpio.*` needs no PSDK headers at all (docs/OPEN-QUESTIONS.md #4)
-and is directly testable on any Linux box with sysfs PWM permissions and a
-bench servo — it is implemented in full. `app_registration.cpp` is also
-buildable and tested on Windows (it only uses yaml-cpp and the filesystem).
-The remaining adapters compile against the PSDK headers on Windows
-(`DROPPOINT_BUILD_PSDK=ON`), but because the PSDK static library is a Linux
-archive they cannot be linked into an executable here. On a Linux/aarch64
-build machine the same source links into the real `droppoint` binary.
-
-The interfaces they implement (`hal/i_telemetry.h` etc.) are complete and
-already exercised end-to-end by `sim/sim_hal.cpp`.
 
 ## Building for the aircraft
 
 ```bash
-# On the companion computer or a Linux cross-build host with the PSDK vendored
-cmake -S droppoint -B build-aarch64 \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake \
-  -DDROPPOINT_BUILD_PSDK=ON \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build build-aarch64 --target droppoint
+# On the companion computer or a Linux host with the PSDK checked out:
+cmake -S droppoint -B build -DDROPPOINT_BUILD_PSDK=ON \
+  -DDROPPOINT_PSDK_ROOT=/path/to/Payload-SDK -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target droppoint
 ```
+
+`DROPPOINT_PSDK_ROOT` defaults to `third_party/psdk`, falling back to
+`../psdk-upstream` when that checkout exists. On Linux the build compiles
+DJI's own `osal*.c` and `manifold3/hal/hal_usb_bulk.c` straight from that
+root (they are NOT copied into this repo) and links
+`psdk_lib/lib/<arch>-linux-gnu-gcc/libpayloadsdk.a`.

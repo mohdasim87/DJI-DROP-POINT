@@ -23,6 +23,166 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+  psdk-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone PSDK 3.16.0
+        run: |
+          git clone --depth 1 --branch 3.16.0 \
+            https://github.com/dji-sdk/Payload-SDK third_party/psdk
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDROPPOINT_BUILD_PSDK=ON
+
+      - name: Build
+        run: cmake --build build --parallel --target droppoint
+
+      - name: Version
+        run: ./build/src/psdk/droppoint --version
+
+      - name: Selftest (no link)
+        run: |
+          # Mirror what the .deb postinst does on a fresh install: the
+          # credentials file (example values) must exist for the selftest.
+          sudo mkdir -p /etc/droppoint
+          sudo cp config/credentials.example.yaml /etc/droppoint/credentials.yaml
+          # The widget-icon lookup expects <config dir>/../assets/widget —
+          # stage the packaged layout with symlinks for both profiles.
+          for profile in m4t m400; do
+            stage=/tmp/dp-$profile
+            mkdir -p "$stage"
+            ln -sfn "$PWD/config/profiles/$profile" "$stage/config"
+            ln -sfn "$PWD/assets" "$stage/assets"
+            ./build/src/psdk/droppoint --selftest --no-link --config "$stage/config"
+          done
+
+  package-arm64:
+    runs-on: ubuntu-22.04-arm
+    container:
+      image: ubuntu:20.04
+    steps:
+      - name: Install build deps
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cmake g++ git python3 dpkg-dev ca-certificates
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone PSDK 3.16.0
+        run: |
+          git clone --depth 1 --branch 3.16.0 \
+            https://github.com/dji-sdk/Payload-SDK third_party/psdk
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDROPPOINT_BUILD_PSDK=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package .debs
+        run: |
+          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g')"
+          VERSION="${VERSION:-0.2.0}"
+          echo "version=$VERSION"
+          for profile in m4t m400; do
+            scripts/package.sh "$profile" "$VERSION" build dist
+          done
+
+      - name: Package m400 .dpk (packaging check only — dummy credentials)
+        run: |
+          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g')"
+          VERSION="${VERSION:-0.2.0}"
+          scripts/package_dpk.sh m400 build tests/data/credentials_test.yaml /tmp/dpk \
+            third_party/psdk
+          DPK="$(ls /tmp/dpk/DropPoint-M400_v*.dpk | head -1)"
+          echo "dpk=$DPK"
+          dpkg-deb -c "$DPK" | tee /tmp/dpk-listing.txt
+          grep -q 'bin/droppoint' /tmp/dpk-listing.txt
+          grep -q 'config/aircraft.yaml' /tmp/dpk-listing.txt
+          echo "dpk packaging check passed (NOT uploaded — dummy credentials)"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: droppoint-packages
+          path: dist/*.deb
+
+  install-test-arm64:
+    needs: package-arm64
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: droppoint-packages
+          path: dist
+
+      - name: Install test per profile
+        run: |
+          set -e
+          for profile in m4t m400; do
+            DEB="$(ls dist/droppoint-${profile}_*_arm64.deb | head -1)"
+            echo "=== install test: $profile ($DEB) ==="
+            docker run --rm -v "$PWD/dist:/dist:ro" arm64v8/ubuntu:20.04 bash -xc "
+              set -e
+              export DEBIAN_FRONTEND=noninteractive
+              dpkg -i '/dist/$(basename $DEB)'
+              /opt/droppoint/bin/droppoint --version
+              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config
+              /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config
+              # upgrade-marker survival: site config edit, real credentials,
+              # and the log dir must all survive a reinstall
+              echo '# site edit marker' >> /opt/droppoint/config/payloads.yaml
+              echo 'marker: survives' >> /etc/droppoint/credentials.yaml
+              touch /var/log/droppoint/marker_file
+              dpkg -i '/dist/$(basename $DEB)'
+              grep -q 'site edit marker' /opt/droppoint/config/payloads.yaml
+              grep -q 'marker: survives' /etc/droppoint/credentials.yaml
+              test -f /var/log/droppoint/marker_file
+              # removal: credentials + logs are site data, never removed
+              dpkg -r droppoint-$profile
+              test -f /etc/droppoint/credentials.yaml
+              test -d /var/log/droppoint
+              echo INSTALL TEST $profile PASSED
+            " 2>&1 | tee "install-$profile.log"
+          done
+
+      - name: Upload install logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-logs
+          path: install-*.log
+
+  tag-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: droppoint-packages
+          path: dist
+
+      - name: Attach .debs to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/*.deb --clobber
+
   lint-docs:
     runs-on: ubuntu-latest
     steps:

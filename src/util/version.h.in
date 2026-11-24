@@ -3,4 +3,11 @@
 
 namespace droppoint::util {
 inline constexpr const char* kBuildVersion = "@DROPPOINT_BUILD_VERSION@";
+// Semantic version, the single source of truth (project() VERSION in the
+// root CMakeLists). Also reported to DJI via DjiCore_SetFirmwareVersion and
+// written into the Manifold 3 app.json, which must match it exactly.
+inline constexpr int kVersionMajor = @PROJECT_VERSION_MAJOR@;
+inline constexpr int kVersionMinor = @PROJECT_VERSION_MINOR@;
+inline constexpr int kVersionPatch = @PROJECT_VERSION_PATCH@;
+inline constexpr const char* kVersionString = "@PROJECT_VERSION@";
 }  // namespace droppoint::util

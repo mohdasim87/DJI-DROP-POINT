@@ -81,10 +81,17 @@ public:
         std::optional<ReleaseMode> requested_mode;
         std::optional<int> requested_payload_index;
         std::optional<double> ambient_temperature_c;
+        std::optional<double> requested_wind_alpha;  // surface-type override, see SURFACE widget
+        std::optional<int> requested_surface_index;  // SURFACE list index (reported back to Pilot 2)
     };
     core::Solution Tick(const CycleInputs& in);
 
     MissionState& Mission() { return mission_; }
+
+    // Live values the Pilot 2 widgets report back (read-only).
+    int ActivePayloadIndex() const { return active_payload_index_; }
+    double AmbientTemperatureC() const { return temperature_c_; }
+    int SurfaceIndex() const { return surface_index_; }
 
 private:
     void UpdateDatumBiasFromRangefinder(std::uint64_t now_us);
@@ -112,6 +119,8 @@ private:
     WindEstimator wind_estimator_;
 
     core::PayloadProfile active_payload_;
+    int active_payload_index_ = 0;
+    int surface_index_ = 1;  // kOpenCountry — matches the default wind_alpha
     double temperature_c_ = 15.0;
 
     // Finite-difference acceleration estimate (EMA, tau 0.5 s) computed from

@@ -11,12 +11,14 @@ namespace droppoint::app {
 CrosshairTargetSource::CrosshairTargetSource(hal::ITelemetry& telemetry, hal::IGimbal& gimbal,
                                              const core::projection::Intrinsics& intrinsics,
                                              core::geodesy::EnuOrigin origin,
-                                             core::terrain::DemSampleFn dem_fn)
+                                             core::terrain::DemSampleFn dem_fn,
+                          std::function<core::ElevationSource(double, double)> elevation_source_fn)
     : telemetry_(telemetry),
       gimbal_(gimbal),
       intrinsics_(intrinsics),
       origin_(std::move(origin)),
-      dem_fn_(std::move(dem_fn)) {}
+      dem_fn_(std::move(dem_fn)),
+      elevation_source_fn_(std::move(elevation_source_fn)) {}
 
 bool CrosshairTargetSource::IsAvailable() const {
     const auto aircraft = telemetry_.GetAircraftState();
@@ -62,7 +64,11 @@ std::optional<hal::DesignationOutcome> CrosshairTargetSource::TryDesignate(
     outcome.target.valid = true;
     outcome.target.geodetic = result.geodetic;
     outcome.target.enu = result.point;
-    outcome.target.elevation_source = core::ElevationSource::kRawDem;
+    outcome.target.elevation_source = result.elevation_source;
+    if (outcome.target.elevation_source == core::ElevationSource::kRawDem && elevation_source_fn_) {
+        outcome.target.elevation_source =
+            elevation_source_fn_(result.geodetic.lat_deg, result.geodetic.lon_deg);
+    }
     outcome.target.depression_angle_rad = result.depression_angle_rad;
     outcome.target.designated_at_us = request.timestamp_us;
     outcome.succeeded = true;
