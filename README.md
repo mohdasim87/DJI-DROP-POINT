@@ -60,6 +60,7 @@ droppoint/
 |---|---|
 | `docs/DropPoint-How-To.pdf` | Illustrated how-to: which package for which drone, install, self-test, simulator, operator controls |
 | `docs/aircraft/M4T.md`, `docs/aircraft/M400.md` | Per-aircraft hardware, weight budget, install and flying steps |
+| `docs/DROP-KITS.md` | Which drop-kit model to buy for each aircraft (JZ, CZI, DroMight, Cybowindow) and the `release.kit` id for each |
 | `docs/CZI-DROP-KITS.md` | Using CZI TH2 / FT4-P / TH4 drop kits and what DropPoint can and cannot trigger |
 | `docs/PSDK-RESEARCH.md` | Phase 0 findings from the real Payload-SDK headers/samples |
 | `docs/OPEN-QUESTIONS.md` | Everything Phase 0 couldn't resolve, with the exact question a human answers on hardware — **start here** |

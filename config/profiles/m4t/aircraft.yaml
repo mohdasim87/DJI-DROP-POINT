@@ -42,7 +42,7 @@ advanced_features: false
 liveview_marker: false
 uart_device: "/dev/ttyUSB0"
 # USB-serial adapter identity reported to the flight controller (M400 has no
-# E-Port UART pins — a USB-serial dongle carries the UART link). Defaults are
+# E-Port UART pins ï¿½ a USB-serial dongle carries the UART link). Defaults are
 # the FTDI FT232; CP2102 = 0x10C4/0xEA60.
 uart_usb_vid: 0x0403
 uart_usb_pid: 0x6001
@@ -67,6 +67,10 @@ pps_available: false
 release:
   backend: "external_operator"
   description: "CZI TH2 (triggered by the aircraft auxiliary bottom light, operated in DJI Pilot 2)"
+  # the kit you bought, from the catalogue in docs/DROP-KITS.md â€” checked
+  # against model, backend and payload weights at load time. Other ids that
+  # fit the M4T: "jz_ad2", "czi_ft4p", "custom_pwm_servo".
+  kit: "czi_th2"
   hold_s: 1.5    # announcement/bookkeeping hold after the release instant
 
   # Alternative: a locally-actuated PWM servo, if this build is ever wired

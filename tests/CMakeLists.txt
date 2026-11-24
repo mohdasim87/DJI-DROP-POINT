@@ -22,6 +22,7 @@ set(DROPPOINT_TEST_SOURCES
     test_sd_notify.cpp
     test_selftest_report.cpp
     test_file_ownership.cpp
+    test_drop_kits.cpp
 )
 
 if(DROPPOINT_BUILD_PSDK)
@@ -40,6 +41,7 @@ target_compile_definitions(droppoint_core_tests PRIVATE
     DROPPOINT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
     DROPPOINT_CONFIG_DIR="${CMAKE_SOURCE_DIR}/config"
     DROPPOINT_WIDGET_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets/widget"
+    DROPPOINT_REPO_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
 add_test(NAME droppoint_core_tests COMMAND droppoint_core_tests)

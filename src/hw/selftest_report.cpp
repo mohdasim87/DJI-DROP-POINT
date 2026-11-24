@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "hal/i_release.h"
+#include "util/drop_kits.h"
 #include "util/version.h"
 
 namespace droppoint::hw {
@@ -61,6 +62,26 @@ std::string BuildSelftestReport(const SelftestFacts& in, bool* had_fail) {
     }
 
     Line(os, "INFO", "release backend: " + cfg.aircraft.release.description);
+
+    if (!cfg.aircraft.release.kit.empty()) {
+        if (const util::DropKit* kit = util::FindDropKit(cfg.aircraft.release.kit)) {
+            std::ostringstream kit_ss;
+            kit_ss << "drop kit: " << kit->maker << " " << kit->model << " ("
+                   << kit->hooks << " hook(s), " << std::fixed << std::setprecision(3)
+                   << kit->weight_kg << " kg, connects to " << kit->interface << ")";
+            Line(os, "INFO", kit_ss.str());
+            if (kit->weight_kg > 0.0 &&
+                cfg.aircraft.onboard_equipment_kg < kit->weight_kg) {
+                Line(os, "WARN",
+                     "onboard_equipment_kg is less than the drop kit alone weighs — "
+                     "weigh your build");
+            }
+        }
+    } else if (cfg.aircraft.release.backend != util::config::ReleaseBackend::kPwmServo) {
+        Line(os, "WARN",
+             "no release.kit set — set release.kit in aircraft.yaml so the kit is "
+             "checked against this aircraft (see docs/DROP-KITS.md)");
+    }
 
     for (const auto& p : cfg.payloads) {
         if (p.calibrated) {

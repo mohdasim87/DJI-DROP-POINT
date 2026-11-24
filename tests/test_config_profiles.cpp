@@ -106,3 +106,74 @@ TEST_CASE("Config: payload without a positive target radius rejected") {
                                    "target_radius_m: 3.0", "target_radius_m: 0.0");
     REQUIRE(LoadFailsWith(dir, "target_radius_m"));
 }
+
+TEST_CASE("Config: shipped profiles load with their drop kit") {
+    REQUIRE(util::config::LoadAll(ConfigRoot() + "/profiles/m4t")
+                .aircraft.release.kit == "czi_th2");
+    REQUIRE(util::config::LoadAll(ConfigRoot() + "/profiles/m400")
+                .aircraft.release.kit == "czi_th4");
+}
+
+TEST_CASE("Config: unknown release.kit rejected and lists the valid ids") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "badkit", "aircraft.yaml",
+                                   "kit: \"czi_th2\"", "kit: \"no_such_kit\"");
+    REQUIRE(LoadFailsWith(dir, "no_such_kit"));
+    REQUIRE(LoadFailsWith(dir, "czi_ft4p"));  // a valid id appears in the message
+}
+
+TEST_CASE("Config: kit that does not fit the model is rejected, naming the ones that do") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "th4onm4t",
+                                   "aircraft.yaml", "kit: \"czi_th2\"", "kit: \"czi_th4\"");
+    REQUIRE(LoadFailsWith(dir, "does not fit"));
+    REQUIRE(LoadFailsWith(dir, "jz_ad2"));  // the error names a kit that fits M4T
+
+    const auto dir2 = MutateProfile(ConfigRoot() + "/profiles/m400", "ad2onm400",
+                                    "aircraft.yaml", "kit: \"czi_th4\"", "kit: \"jz_ad2\"");
+    REQUIRE(LoadFailsWith(dir2, "does not fit"));
+}
+
+TEST_CASE("Config: psdk_widget with jz_ad2 is rejected") {
+    // jz_ad2 fits the M4T but lists only external_operator; psdk_widget is
+    // additionally still an M400-only backend — either way it must not load.
+    auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "pw_ad2", "aircraft.yaml",
+                             "kit: \"czi_th2\"", "kit: \"jz_ad2\"");
+    dir = MutateProfile(dir.string(), "pw_ad2b", "aircraft.yaml",
+                        "backend: \"external_operator\"", "backend: \"psdk_widget\"");
+    REQUIRE(LoadFailsWith(dir, "psdk_widget"));
+}
+
+TEST_CASE("Config: psdk_widget + czi_th4 on M350_RTK is rejected (backend is M400-only)") {
+    // czi_th4 lists M350_RTK as compatible and allows psdk_widget, but the
+    // Widget Manager backend itself remains M400-only.
+    auto dir = MutateProfile(ConfigRoot() + "/profiles/m400", "m350pw", "aircraft.yaml",
+                             "model: \"M400\"", "model: \"M350_RTK\"");
+    dir = MutateProfile(dir.string(), "m350pwb", "aircraft.yaml",
+                        "backend: \"external_operator\"", "backend: \"psdk_widget\"");
+    REQUIRE(LoadFailsWith(dir, "psdk_widget"));
+}
+
+TEST_CASE("Config: pwm_servo with an operator-actuated kit is rejected") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "pwm_th2",
+                                   "aircraft.yaml", "backend: \"external_operator\"",
+                                   "backend: \"pwm_servo\"");
+    REQUIRE(LoadFailsWith(dir, "pwm_servo"));
+    REQUIRE(LoadFailsWith(dir, "czi_th2"));
+}
+
+TEST_CASE("Config: payload over the kit's per-hook rating is rejected and names both") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "hooklimit",
+                                   "payloads.yaml", "mass_kg: 0.080", "mass_kg: 0.600");
+    REQUIRE(LoadFailsWith(dir, "med_pouch_80g"));
+    REQUIRE(LoadFailsWith(dir, "czi_th2"));
+}
+
+TEST_CASE("Config: empty release.description is filled from the kit") {
+    const auto dir = MutateProfile(
+        ConfigRoot() + "/profiles/m4t", "kitdesc", "aircraft.yaml",
+        "description: \"CZI TH2 (triggered by the aircraft auxiliary bottom light, "
+        "operated in DJI Pilot 2)\"",
+        "description: \"\"");
+    const auto cfg = util::config::LoadAll(dir.string());
+    REQUIRE(cfg.aircraft.release.description.find("CZI") != std::string::npos);
+    REQUIRE(cfg.aircraft.release.description.find("TH2") != std::string::npos);
+}

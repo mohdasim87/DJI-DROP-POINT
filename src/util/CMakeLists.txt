@@ -7,6 +7,7 @@ add_library(droppoint_util STATIC
     timesync.cpp
     logging.cpp
     config.cpp
+    drop_kits.cpp
     drop_log.cpp
 )
 target_include_directories(droppoint_util PUBLIC

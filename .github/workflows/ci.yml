@@ -178,6 +178,7 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               dpkg -i '/dist/$(basename $DEB)'
               /opt/droppoint/bin/droppoint --version
+              /opt/droppoint/bin/droppoint --list-kits
               /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config || {
                 echo '::error::selftest failed — dumping report log if present'
                 cat /var/log/droppoint/selftest.txt ./data/logs/selftest.txt 2>/dev/null || true
@@ -194,6 +195,7 @@ jobs:
                 exit 1
               }
               grep -q '\[OK\] widget files generated' /tmp/st-$profile.log
+              grep -q '\[INFO\] drop kit:' /tmp/st-$profile.log
               # the report the ROOT run wrote must have been adopted into the
               # log dir's ownership — the service user can overwrite it
               runuser -u droppoint -- sh -c 'test -w /var/log/droppoint/selftest.txt'
@@ -228,6 +230,7 @@ jobs:
             # so a mid-script death can never look like a pass
             grep -q "INSTALL TEST $profile PASSED" "install-$profile.log"
             grep -Eq 'SUMMARY.*fired=1' "install-$profile.log"
+            grep -q 'drop kit:' "install-$profile.log"
             if grep -q '\[FAIL\]' "install-$profile.log"; then
               echo "::error::install log for $profile contains a [FAIL] line"
               exit 1

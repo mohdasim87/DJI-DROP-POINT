@@ -45,6 +45,11 @@ enum class DefaultReleaseMode { kManual, kAuto };
 struct ReleaseConfig {
     ReleaseBackend backend = ReleaseBackend::kPwmServo;
     std::string description;
+    // `release.kit`: optional drop-kit catalogue id (util/drop_kits.h, see
+    // docs/DROP-KITS.md). When set, LoadAll validates the kit against the
+    // aircraft model, this backend and every payload weight; when
+    // `description` is empty it is filled from the kit.
+    std::string kit;
     double hold_s = 1.5;  // post-fire hold before the output is driven safe
 
     // PWM servo parameters, under `release.pwm`.
@@ -129,6 +134,11 @@ struct Config {
     std::vector<LensProfile> lenses;
     SystemConfig system;
 };
+
+// Aircraft models this build supports (the allowlist aircraft.yaml's
+// `model` is validated against, and the set `custom_pwm_servo` drop kits
+// claim compatibility with).
+const std::vector<std::string>& KnownAircraftModels();
 
 AircraftConfig LoadAircraftConfig(const std::string& path);
 std::vector<core::PayloadProfile> LoadPayloadsConfig(const std::string& path);

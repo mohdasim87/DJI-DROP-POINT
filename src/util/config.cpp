@@ -1,9 +1,14 @@
 #include "config.h"
 
+#include "drop_kits.h"
+
 #include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
 
 #include "core/math_constants.h"
 
@@ -73,23 +78,32 @@ ReleaseBackend ParseReleaseBackend(const std::string& s, const std::string& cont
         "'");
 }
 
+const char* ReleaseBackendName(ReleaseBackend b) {
+    switch (b) {
+        case ReleaseBackend::kPwmServo: return "pwm_servo";
+        case ReleaseBackend::kExternalOperator: return "external_operator";
+        case ReleaseBackend::kPsdkWidget: return "psdk_widget";
+    }
+    return "?";
+}
+
 DefaultReleaseMode ParseDefaultReleaseMode(const std::string& s, const std::string& context) {
     if (s == "manual") return DefaultReleaseMode::kManual;
     if (s == "auto") return DefaultReleaseMode::kAuto;
     throw ConfigError(context + ": default_release_mode must be 'manual' or 'auto', got '" + s + "'");
 }
 
+}  // namespace
+
 // Aircraft models this build supports. Anything else is almost certainly a
 // typo that would silently load the wrong airframe parameters.
-const std::vector<std::string>& KnownModels() {
+const std::vector<std::string>& KnownAircraftModels() {
     static const std::vector<std::string> models = {
         "M300_RTK", "M350_RTK", "M30", "M30T", "M3E", "M3T",
         "M4E",      "M4T",      "M4D", "M4TD", "M400",
     };
     return models;
 }
-
-}  // namespace
 
 AircraftConfig LoadAircraftConfig(const std::string& path) {
     const YAML::Node root = LoadFile(path);
@@ -125,6 +139,7 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
         cfg.release.backend = ParseReleaseBackend(
             OptionalField<std::string>(r, "backend", "pwm_servo"), rctx);
         cfg.release.description = OptionalField<std::string>(r, "description", "");
+        cfg.release.kit = OptionalField<std::string>(r, "kit", "");
         cfg.release.hold_s = OptionalField(r, "hold_s", cfg.release.hold_s);
         if (r["pwm"]) {
             const YAML::Node pwm = r["pwm"];
@@ -154,7 +169,7 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
     }
 
     bool known_model = false;
-    for (const auto& m : KnownModels()) {
+    for (const auto& m : KnownAircraftModels()) {
         if (cfg.model == m) known_model = true;
     }
     if (!known_model) {
@@ -313,6 +328,66 @@ Config LoadAll(const std::string& config_dir) {
     cfg.payloads = LoadPayloadsConfig((fs::path(config_dir) / "payloads.yaml").string());
     cfg.lenses = LoadLensesConfig((fs::path(config_dir) / "lenses.yaml").string());
     cfg.system = LoadSystemConfig((fs::path(config_dir) / "system.yaml").string());
+
+    // Drop-kit validation: when release.kit names a catalogue entry it must
+    // fit this aircraft model, allow this backend, and be rated for every
+    // payload it would carry (see docs/DROP-KITS.md).
+    if (!cfg.aircraft.release.kit.empty()) {
+        const DropKit* kit = FindDropKit(cfg.aircraft.release.kit);
+        if (kit == nullptr) {
+            std::ostringstream ids;
+            for (size_t i = 0; i < DropKitCatalogue().size(); ++i) {
+                if (i) ids << ", ";
+                ids << DropKitCatalogue()[i].id;
+            }
+            throw ConfigError("aircraft.yaml: unknown release.kit '" +
+                              cfg.aircraft.release.kit + "' — valid ids: " + ids.str());
+        }
+        const auto& models = kit->aircraft_models;
+        if (std::find(models.begin(), models.end(), cfg.aircraft.model) == models.end()) {
+            const auto fitting = KitsForModel(cfg.aircraft.model);
+            std::ostringstream msg;
+            msg << "aircraft.yaml: release.kit '" << kit->id << "' (" << kit->maker << " "
+                << kit->model << ") does not fit aircraft model '" << cfg.aircraft.model
+                << "'";
+            if (fitting.empty()) {
+                msg << " — no kit in the catalogue fits '" << cfg.aircraft.model << "'";
+            } else {
+                msg << " — kits that fit '" << cfg.aircraft.model << "':";
+                for (const auto* f : fitting) msg << " " << f->id;
+            }
+            throw ConfigError(msg.str());
+        }
+        const auto& allowed = kit->backends;
+        if (std::find(allowed.begin(), allowed.end(), cfg.aircraft.release.backend) ==
+            allowed.end()) {
+            std::ostringstream msg;
+            msg << "aircraft.yaml: release.backend '"
+                << ReleaseBackendName(cfg.aircraft.release.backend)
+                << "' is not supported by drop kit '" << kit->id << "' (supports:";
+            for (const auto b : allowed) {
+                msg << " " << ReleaseBackendName(b);
+            }
+            msg << ")";
+            throw ConfigError(msg.str());
+        }
+        if (kit->max_load_per_hook_kg > 0.0) {
+            for (const auto& p : cfg.payloads) {
+                if (p.mass_kg > kit->max_load_per_hook_kg) {
+                    std::ostringstream msg;
+                    msg << "payloads.yaml: payload '" << p.name << "' (" << std::fixed
+                        << std::setprecision(3) << p.mass_kg
+                        << " kg) exceeds drop kit '" << kit->id
+                        << "' max load per hook (" << kit->max_load_per_hook_kg << " kg)";
+                    throw ConfigError(msg.str());
+                }
+            }
+        }
+        if (cfg.aircraft.release.description.empty()) {
+            cfg.aircraft.release.description =
+                kit->maker + " " + kit->model + " (" + kit->trigger + ")";
+        }
+    }
 
     bool found_matching_lens = false;
     for (const auto& lens : cfg.lenses) {

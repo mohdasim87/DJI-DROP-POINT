@@ -4,6 +4,9 @@
 // crash on null/empty inputs, must mark link-only checks SKIP, must warn
 // (not fail) on the shipped example credentials, and must pass on both
 // shipped aircraft profiles the way a fresh .deb install would see them.
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 #include "test_framework.h"
@@ -123,3 +126,98 @@ TEST_CASE("SelftestReport: widget dir failure is FAIL") {
 }
 
 }  // namespace
+
+namespace {
+
+// Minimal copy of the mutate-a-shipped-profile pattern from
+// test_config_profiles.cpp (kept file-local like there).
+std::filesystem::path MutateProfileForReport(const std::string& src_dir,
+                                             const std::string& case_name,
+                                             const std::string& from,
+                                             const std::string& to) {
+    const std::filesystem::path dst =
+        std::filesystem::temp_directory_path() / ("droppoint_str_" + case_name);
+    std::filesystem::remove_all(dst);
+    std::filesystem::create_directories(dst);
+    for (const char* f : {"aircraft.yaml", "payloads.yaml", "lenses.yaml", "system.yaml"}) {
+        std::filesystem::copy_file(std::filesystem::path(src_dir) / f, dst / f,
+                                   std::filesystem::copy_options::overwrite_existing);
+    }
+    const std::filesystem::path target = dst / "aircraft.yaml";
+    std::ifstream in(target);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::string text = ss.str();
+    in.close();
+    const auto pos = text.find(from);
+    REQUIRE(pos != std::string::npos);
+    text.replace(pos, from.size(), to);
+    std::ofstream out(target, std::ios::trunc);
+    out << text;
+    return dst;
+}
+
+}  // namespace
+
+TEST_CASE("SelftestReport: drop kit INFO line for both shipped profiles") {
+    {
+        const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m4t");
+        auto f = NoLinkFacts(cfg);
+        f.credentials_parsed = true;
+        bool had_fail = false;
+        const std::string r = BuildSelftestReport(f, &had_fail);
+        REQUIRE(!had_fail);
+        REQUIRE(r.find("[INFO] drop kit: CZI TH2 Throwing Hook (2 hook(s), 0.070 kg, "
+                       "connects to none (light sensor") != std::string::npos);
+    }
+    {
+        const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m400");
+        auto f = NoLinkFacts(cfg);
+        f.credentials_parsed = true;
+        bool had_fail = false;
+        const std::string r = BuildSelftestReport(f, &had_fail);
+        REQUIRE(!had_fail);
+        REQUIRE(r.find("[INFO] drop kit: CZI TH4 V3 Throwing Hook Drop System "
+                       "(4 hook(s), 0.320 kg") != std::string::npos);
+    }
+}
+
+TEST_CASE("SelftestReport: no-kit warns for operator backends but not pwm_servo") {
+    // root config: pwm_servo backend, no kit — nothing extra expected
+    {
+        const auto cfg = config::LoadAll(ConfigRoot());
+        auto f = NoLinkFacts(cfg);
+        f.credentials_parsed = true;
+        bool had_fail = false;
+        const std::string r = BuildSelftestReport(f, &had_fail);
+        REQUIRE(r.find("no release.kit set") == std::string::npos);
+        REQUIRE(r.find("drop kit:") == std::string::npos);
+    }
+    // m4t with the kit line removed: external_operator backend -> WARN
+    {
+        const auto dir = MutateProfileForReport(ConfigRoot() + "/profiles/m4t",
+                                                "nokit", "  kit: \"czi_th2\"\n", "");
+        const auto cfg = config::LoadAll(dir.string());
+        auto f = NoLinkFacts(cfg);
+        f.credentials_parsed = true;
+        bool had_fail = false;
+        const std::string r = BuildSelftestReport(f, &had_fail);
+        REQUIRE(r.find("[WARN] no release.kit set") != std::string::npos);
+        REQUIRE(!had_fail);
+    }
+}
+
+TEST_CASE("SelftestReport: onboard equipment lighter than the kit warns") {
+    // czi_th2 alone weighs 0.070 kg — claim only 0.010 of onboard equipment.
+    const auto dir = MutateProfileForReport(ConfigRoot() + "/profiles/m4t",
+                                            "lightequip", "onboard_equipment_kg: 0.110",
+                                            "onboard_equipment_kg: 0.010");
+    const auto cfg = config::LoadAll(dir.string());
+    auto f = NoLinkFacts(cfg);
+    f.credentials_parsed = true;
+    bool had_fail = false;
+    const std::string r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(r.find("onboard_equipment_kg is less than the drop kit alone weighs") !=
+            std::string::npos);
+    REQUIRE(!had_fail);
+}

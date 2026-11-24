@@ -79,11 +79,15 @@ def term_image(title: str, text: str, out: Path, max_rows: int = 40):
         omitted = len(lines) - keep_head - 8
         lines = lines[:keep_head] + [f"        … {omitted} lines omitted …"] + lines[-8:]
 
-    body_font = font("consola.ttf", 17)
+    pad, bar_h, width = 14, 34, 1600
+    # shrink the font until the longest line fits — a clipped line would lie
+    # about what the command really printed (e.g. the wide --list-kits table)
+    max_chars = max((len(ln) for ln in lines), default=1)
+    size = min(17, max(9, int((width - 2 * pad) / (0.62 * max_chars))))
+    body_font = font("consola.ttf", size)
+    line_h = int(size * 1.32)
     title_font = font("consolab.ttf", 16) if (FONT_DIR / "consolab.ttf").exists() \
         else font("consola.ttf", 16)
-    pad, bar_h, line_h = 14, 34, 22
-    width = 1600
     height = bar_h + pad + line_h * len(lines) + pad
     img = Image.new("RGB", (width, height), "#0c0c0c")
     d = ImageDraw.Draw(img)
@@ -345,6 +349,22 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 3mm;
         font-size: 9.2pt; }
 th, td { border: 1px solid #c8cdd4; padding: 1.6mm 2.4mm; text-align: left; }
 th { background: #eef2f7; }
+/* the drop-kit tables are 9 columns — fixed layout + small font keeps
+   every column inside A4 portrait */
+table.kits { table-layout: fixed; font-size: 7.4pt; }
+table.kits th, table.kits td { padding: 1mm 1.1mm; overflow-wrap: break-word; }
+/* ids like `cybowindow_4hook` and `psdk_widget` must not split mid-token */
+table.kits code { font-size: 6.6pt; }
+table.kits td code { padding: 0; }
+table.kits th:nth-child(1) { width: 16%; }
+table.kits th:nth-child(2) { width: 10%; }
+table.kits th:nth-child(3) { width: 12%; }
+table.kits th:nth-child(4) { width: 7%; }
+table.kits th:nth-child(5) { width: 8%; }
+table.kits th:nth-child(6) { width: 11%; }
+table.kits th:nth-child(7) { width: 11%; }
+table.kits th:nth-child(8) { width: 11%; }
+table.kits th:nth-child(9) { width: 14%; }
 code { font-family: Consolas, monospace; font-size: 9pt;
        background: #f2f4f7; padding: 0 1mm; border-radius: 1mm; }
 pre { font-family: Consolas, monospace; font-size: 8.6pt; background: #f6f8fa;
@@ -512,6 +532,9 @@ def main() -> int:
     st_m400 = run([sim_exe, "--selftest", "--config", "config/profiles/m400"], cwd=REPO)
     term_image("> droppoint_sim_main.exe --selftest --config config/profiles/m400",
                st_m400, shots / "s5b-selftest-m400.png")
+    kits_out = run([sim_exe, "--list-kits"], cwd=REPO)
+    term_image("> droppoint_sim_main.exe --list-kits", kits_out,
+               shots / "s10-list-kits.png", max_rows=30)
 
     print("[4/9] ARM64 install transcripts (CI artifacts)")
     transcript_build_ids = set()
@@ -566,7 +589,8 @@ def main() -> int:
     required = (["s1-ci-run.png", "s2-ctest.png", "s3-sim-hover.png",
                  "s4-sim-crosswind.png", "s5a-selftest-m4t.png",
                  "s5b-selftest-m400.png", "s7-dashboard.png",
-                 "s8-widgets-illustration.png", "s9-floating-window.png"] +
+                 "s8-widgets-illustration.png", "s9-floating-window.png",
+                 "s10-list-kits.png"] +
                 [f"s6-{p}-{k}.png" for p in ("m4t", "m400")
                  for k in ("install", "upgrade")])
     for name in required:
@@ -601,10 +625,10 @@ def main() -> int:
         Linux against DJI's libpayloadsdk.a (Payload-SDK 3.16.0).</li>
       <li>ARM64 .deb packages install, self-test, upgrade (keeping site
         config), and remove (keeping credentials and logs) in a clean
-        Ubuntu 20.04 container — see section 6.</li></ul>""")
+        Ubuntu 20.04 container — see section 7.</li></ul>""")
     B("""<p><b>Not verified:</b> nothing here has run on an aircraft. Every
       hardware-facing adapter is marked unverified in the source tree; the
-      before-first-flight checklist is section 9.</p>""")
+      before-first-flight checklist is section 10.</p>""")
     B(img("s1-ci-run.png", "Real capture — the GitHub Actions run for this "
           "build: every job green (unit tests on Ubuntu and Windows, the "
           "PSDK Linux build, ARM64 packaging and the clean-install test)."))
@@ -631,7 +655,9 @@ def main() -> int:
       not work. It is never published — keep it private.</p>
       <p>Both .deb packages ship the same binaries; the shipped
       <code>config/</code> directory is the aircraft profile (payloads, lens,
-      release backend and gates for that airframe).</p>""")
+      release backend and gates for that airframe).</p>
+      <p>You also need a drop kit: section 5 lists the compatible models for
+      each aircraft and the <code>release.kit</code> value to set.</p>""")
 
     # -- 3/4/5: aircraft + drop-kit guides (verbatim markdown) ------------------
     m4t_blocks = md_blocks("docs/aircraft/M4T.md")
@@ -642,13 +668,19 @@ def main() -> int:
     SEC("<h2>4 · Matrice 400 — aircraft guide</h2>" + m400_blocks[0])
     for e in m400_blocks[1:]:
         B(e)
+    # 9-column tables get the fixed-layout class so nothing clips on A4
+    kit_blocks = [e.replace("<table>", '<table class="kits">')
+                  for e in md_blocks("docs/DROP-KITS.md")]
+    SEC("<h2>5 · Compatible drop kits — which model to buy</h2>" + kit_blocks[0])
+    for e in kit_blocks[1:]:
+        B(e)
     czi_blocks = md_blocks("docs/CZI-DROP-KITS.md")
-    SEC("<h2>5 · CZI drop kits — integration notes</h2>" + czi_blocks[0])
+    SEC("<h2>6 · CZI drop kits — integration notes</h2>" + czi_blocks[0])
     for e in czi_blocks[1:]:
         B(e)
 
-    # -- 6: install step by step ------------------------------------------------
-    SEC(f"""<h2>6 · Installing, step by step (real ARM64 transcript)</h2>
+    # -- 7: install step by step ------------------------------------------------
+    SEC(f"""<h2>7 · Installing, step by step (real ARM64 transcript)</h2>
       <p>Every block below is a verbatim capture from the automated install
       test on a clean arm64 Ubuntu 20.04 container — the same steps you run
       on the companion computer. The transcripts below are from the package
@@ -690,8 +722,8 @@ def main() -> int:
     B(img("s6-m400-upgrade.png", "Real capture — the same assertions on the "
           "Matrice 400 package."))
 
-    # -- 7: try without a drone ---------------------------------------------------
-    SEC("""<h2>7 · Trying it without a drone</h2>
+    # -- 8: try without a drone ---------------------------------------------------
+    SEC("""<h2>8 · Trying it without a drone</h2>
       <p>The same binary that flies carries a full simulator — scripted pilot,
       wind model, truth drop and every release gate. Commands exactly as run:</p>""")
     B(img("s3-sim-hover.png", "Real capture — droppoint_sim_main.exe --sim hover: "
@@ -706,6 +738,9 @@ def main() -> int:
           "profile."))
     B(img("s5b-selftest-m400.png", "Real capture — the same self-test for "
           "the Matrice 400 profile."))
+    B(img("s10-list-kits.png", "Real capture — droppoint_sim_main.exe "
+          "--list-kits: the built-in drop-kit catalogue the config is "
+          "checked against (same list as section 5)."))
     B("""<h3>The bench dashboard</h3>
       <p><code>tools/dashboard/index.html</code> is a development tool that
       plots the target, predicted impact point and dispersion cloud live
@@ -734,7 +769,7 @@ def main() -> int:
         f"<td>{html.escape(actions[w['index']])}</td>"
         f"<td>{'yes' if w['rc'] else 'no'}</td></tr>"
         for w in widgets)
-    SEC("""<h2>8 · Operator controls in DJI Pilot 2</h2>
+    SEC("""<h2>9 · Operator controls in DJI Pilot 2</h2>
       <p>DropPoint registers ten widgets — five on the main interface (which
       require icons) and five on the settings interface. All button-style
       widgets can additionally be bound to the RC's hardware buttons inside
@@ -756,8 +791,9 @@ def main() -> int:
             sys.exit(f"error: no checklist items found in {rel}")
         return "".join(items)
 
+    # -- 10: before first flight --------------------------------------------------
     # flows onto the same page as the floating-window image when it fits
-    B("""<h2>9 · Before first flight — verify on the aircraft</h2>
+    B("""<h2>10 · Before first flight — verify on the aircraft</h2>
       <p>Nothing in this package has run on an aircraft. Before relying on a
       drop, work through the merged checklist from both aircraft guides:</p>""")
     B(f"""<ul class="checklist">
@@ -799,6 +835,15 @@ def main() -> int:
                      f"— the PDF was not regenerated from the new artifacts")
     if f"{test_count} unit" not in pdf_text:
         sys.exit(f"error: test count '{test_count}' not found in PDF text")
+    # every drop-kit id in the catalogue must appear in the PDF (the
+    # DROP-KITS.md table) — ids are the first string of each entry
+    kit_ids = re.findall(r'^\s*\{"([a-z0-9_]+)",',
+                         read(REPO / "src/util/drop_kits.cpp"), re.M)
+    if len(kit_ids) < 5:
+        sys.exit("error: catalogue id parse found <5 ids in drop_kits.cpp")
+    for kid in kit_ids:
+        if kid not in pdf_text:
+            sys.exit(f"error: drop-kit id '{kid}' not found in PDF text")
     print(f"DONE: {out_pdf} — {doc.page_count} pages, "
           f"{out_pdf.stat().st_size} bytes")
     return 0

@@ -66,6 +66,7 @@
 #include "psdk/telemetry_subscription.h"
 #include "psdk/widget_bridge.h"
 #include "util/config.h"
+#include "util/drop_kits.h"
 #include "util/drop_log.h"
 #include "util/logging.h"
 #include "util/version.h"
@@ -108,6 +109,8 @@ void Usage() {
         "  droppoint [--config <dir>] [--credentials <file>] [--verbose]\n"
         "  droppoint --selftest [--no-link] [path flags]\n"
         "  droppoint --probe-widgets <mount position> [path flags]\n"
+        "  droppoint --list-kits [--config <dir>]  (with --config, marks the\n"
+        "                                         kits that fit that aircraft)\n"
         "  droppoint --version\n",
         droppoint::util::kVersionString, droppoint::util::kBuildVersion);
 }
@@ -231,6 +234,7 @@ int main(int argc, char** argv) {
     bool selftest = false;
     bool no_link = false;
     bool verbose = false;
+    bool list_kits = false;
     int probe_position = -1;
 
     for (int i = 1; i < argc; ++i) {
@@ -247,6 +251,8 @@ int main(int argc, char** argv) {
             probe_position = std::atoi(argv[++i]);
         } else if (arg == "--verbose") {
             verbose = true;
+        } else if (arg == "--list-kits") {
+            list_kits = true;
         } else if (arg == "--version") {
             std::printf("droppoint %s (build %s)\n", droppoint::util::kVersionString,
                         droppoint::util::kBuildVersion);
@@ -270,6 +276,17 @@ int main(int argc, char** argv) {
     const fs::path exe_dir = fs::absolute(argv[0]).parent_path();
 
     try {
+        // ---- --list-kits: catalogue dump, no config/link work unless the
+        // user asked for the fit marks via --config --------------------------
+        if (list_kits) {
+            std::string model;
+            if (!explicit_config.empty()) {
+                model = droppoint::util::config::LoadAll(explicit_config).aircraft.model;
+            }
+            std::fputs(droppoint::util::FormatKitTable(model).c_str(), stdout);
+            return 0;
+        }
+
         // ---- config ---------------------------------------------------------
         const std::string config_dir = ResolveConfigDir(explicit_config, exe_dir);
         DP_LOG_INFO("main", std::string("droppoint build ") + droppoint::util::kBuildVersion +

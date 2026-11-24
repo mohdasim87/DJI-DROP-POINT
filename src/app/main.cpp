@@ -19,6 +19,7 @@
 #include "sim/sim_hal.h"
 #include "sim/sim_world.h"
 #include "util/config.h"
+#include "util/drop_kits.h"
 #include "util/logging.h"
 #include "util/version.h"
 
@@ -32,6 +33,8 @@ void PrintUsage() {
         "             gusty-wind, wind-shear, sloping-terrain, gnss-degradation,\n"
         "             rtk-loss, telemetry-dropout, gimbal-slew, mis-designated-target\n"
         "\n"
+        "--list-kits prints the compatible drop-kit catalogue and exits; with\n"
+        "  --config <dir> it also marks the kits that fit that aircraft.\n"
         "--selftest runs the first-boot self-test (spec 15.3) and exits: PSDK link\n"
         "  status, credential validity, each data subscription topic, wind topic\n"
         "  presence, rangefinder presence, release GPIO responding, DEM tiles found,\n"
@@ -70,6 +73,23 @@ int RunSelfTest(const std::string& config_dir) {
                     cfg.aircraft.release.description.empty()
                         ? ""
                         : (std::string(" — ") + cfg.aircraft.release.description).c_str());
+        const auto* kit = cfg.aircraft.release.kit.empty()
+                              ? nullptr
+                              : droppoint::util::FindDropKit(cfg.aircraft.release.kit);
+        if (kit != nullptr) {
+            std::printf("[INFO] drop kit: %s %s (%d hook(s), %.3f kg, connects to %s)\n",
+                        kit->maker.c_str(), kit->model.c_str(), kit->hooks, kit->weight_kg,
+                        kit->interface.c_str());
+            if (kit->weight_kg > 0.0 &&
+                cfg.aircraft.onboard_equipment_kg < kit->weight_kg) {
+                std::printf("[WARN] onboard_equipment_kg is less than the drop kit alone "
+                            "weighs — weigh your build\n");
+            }
+        } else if (cfg.aircraft.release.backend !=
+                   droppoint::util::config::ReleaseBackend::kPwmServo) {
+            std::printf("[WARN] no release.kit set — set release.kit in aircraft.yaml so "
+                        "the kit is checked against this aircraft (docs/DROP-KITS.md)\n");
+        }
         std::printf("[INFO] max payload: %.3f kg (onboard equipment %.3f kg)\n",
                     cfg.aircraft.max_payload_kg, cfg.aircraft.onboard_equipment_kg);
         for (const auto& p : cfg.payloads) {
@@ -288,6 +308,8 @@ int main(int argc, char** argv) {
     std::string profile_dir;
     bool verbose = false;
     bool selftest = false;
+    bool list_kits = false;
+    bool config_explicit = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--sim" && i + 1 < argc) {
@@ -296,8 +318,11 @@ int main(int argc, char** argv) {
             verbose = true;
         } else if (arg == "--selftest") {
             selftest = true;
+        } else if (arg == "--list-kits") {
+            list_kits = true;
         } else if (arg == "--config" && i + 1 < argc) {
             config_dir = argv[++i];
+            config_explicit = true;
         } else if (arg == "--profile" && i + 1 < argc) {
             profile_dir = argv[++i];
         } else if (arg == "--credentials" && i + 1 < argc) {
@@ -305,6 +330,20 @@ int main(int argc, char** argv) {
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return 0;
+        }
+    }
+
+    if (list_kits) {
+        try {
+            std::string model;
+            if (config_explicit) {
+                model = droppoint::util::config::LoadAll(config_dir).aircraft.model;
+            }
+            std::fputs(droppoint::util::FormatKitTable(model).c_str(), stdout);
+            return 0;
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "fatal: %s\n", e.what());
+            return 1;
         }
     }
 
