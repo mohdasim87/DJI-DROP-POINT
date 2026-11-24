@@ -17,7 +17,11 @@ User=droppoint
 Group=droppoint
 # dialout for the /dev/tty* UART adapter; systemd creates /var/log/droppoint
 # (LogsDirectory) and /run/droppoint (RuntimeDirectory) owned by the service
-# user, so the app can write logs + widget files without root-created dirs.
+# user — the app puts its per-process widget files under RuntimeDirectory
+# and keeps files in the log dir owned by the service user. When checking an
+# install by hand, run the self-test the same way the service runs:
+#   sudo -u droppoint /opt/droppoint/bin/droppoint --selftest --no-link \
+#     --config /opt/droppoint/config
 SupplementaryGroups=dialout
 LogsDirectory=droppoint
 RuntimeDirectory=droppoint

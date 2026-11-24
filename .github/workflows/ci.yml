@@ -29,7 +29,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone PSDK 3.16.0
+        shell: bash
         run: |
+          set -euo pipefail
           git clone --depth 1 --branch 3.16.0 \
             https://github.com/dji-sdk/Payload-SDK third_party/psdk
 
@@ -42,7 +44,9 @@ jobs:
         run: cmake --build build --parallel --target droppoint
 
       - name: Install gdb (crash diagnosis)
+        shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y gdb
 
@@ -50,8 +54,9 @@ jobs:
         run: ./build/src/psdk/droppoint --version
 
       - name: Selftest (no link)
+        shell: bash
         run: |
-          set -x
+          set -euxo pipefail
           # Mirror what the .deb postinst does on a fresh install: the
           # credentials file (example values) must exist for the selftest.
           sudo mkdir -p /etc/droppoint
@@ -80,7 +85,9 @@ jobs:
       image: ubuntu:20.04
     steps:
       - name: Install build deps
+        shell: bash
         run: |
+          set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends \
@@ -91,7 +98,9 @@ jobs:
           fetch-depth: 0
 
       - name: Clone PSDK 3.16.0
+        shell: bash
         run: |
+          set -euo pipefail
           git clone --depth 1 --branch 3.16.0 \
             https://github.com/dji-sdk/Payload-SDK third_party/psdk
 
@@ -110,8 +119,10 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
       - name: Package .debs
+        shell: bash
         run: |
-          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g')"
+          set -euo pipefail
+          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g' || true)"
           VERSION="${VERSION:-0.2.0}"
           echo "version=$VERSION"
           for profile in m4t m400; do
@@ -119,8 +130,10 @@ jobs:
           done
 
       - name: Package m400 .dpk (packaging check only — dummy credentials)
+        shell: bash
         run: |
-          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g')"
+          set -euo pipefail
+          VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//; s/[^0-9A-Za-z.+-]/-/g' || true)"
           VERSION="${VERSION:-0.2.0}"
           bash scripts/package_dpk.sh m400 build tests/data/credentials_test.yaml /tmp/dpk \
             third_party/psdk
@@ -150,8 +163,9 @@ jobs:
           path: dist
 
       - name: Install test per profile
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           for profile in m4t m400; do
             DEB="$(ls dist/droppoint-${profile}_*_arm64.deb | head -1)"
             echo "=== install test: $profile ($DEB) ==="
@@ -166,17 +180,26 @@ jobs:
                 exit 1
               }
               # the service runs as user 'droppoint' — the selftest must pass
-              # without root, including writing the widget dir under the log dir
+              # without root; widget files are per-process so ownership of the
+              # log dir must not matter for them
               runuser -u droppoint -- /opt/droppoint/bin/droppoint \
                 --selftest --no-link --config /opt/droppoint/config | tee /tmp/st-$profile.log
-              test ${PIPESTATUS[0]} -eq 0 || {
+              test \${PIPESTATUS[0]} -eq 0 || {
                 echo '::error::non-root selftest failed — dumping report log'
                 cat /var/log/droppoint/selftest.txt 2>/dev/null || true
                 exit 1
               }
               grep -q '\[OK\] widget files generated' /tmp/st-$profile.log
+              # the report the ROOT run wrote must have been adopted into the
+              # log dir's ownership — the service user can overwrite it
+              runuser -u droppoint -- sh -c 'test -w /var/log/droppoint/selftest.txt'
+              # alternating owners must keep working: root again, then the
+              # service user again
+              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config
+              runuser -u droppoint -- /opt/droppoint/bin/droppoint \
+                --selftest --no-link --config /opt/droppoint/config
               /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config | tee /tmp/sim-$profile.log
-              test ${PIPESTATUS[0]} -eq 0
+              test \${PIPESTATUS[0]} -eq 0
               grep -Eq 'SUMMARY.*fired=1' /tmp/sim-$profile.log || {
                 echo '::error::hover sim did not fire for profile'
                 cat /tmp/sim-$profile.log
@@ -197,6 +220,14 @@ jobs:
               test -d /var/log/droppoint
               echo INSTALL TEST $profile PASSED
             " 2>&1 | tee "install-$profile.log"
+            # host-side assertions: independent of the container's exit code,
+            # so a mid-script death can never look like a pass
+            grep -q "INSTALL TEST $profile PASSED" "install-$profile.log"
+            grep -Eq 'SUMMARY.*fired=1' "install-$profile.log"
+            if grep -q '\[FAIL\]' "install-$profile.log"; then
+              echo "::error::install log for $profile contains a [FAIL] line"
+              exit 1
+            fi
           done
 
       - name: Upload install logs
@@ -229,7 +260,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check every doc has a Status marker
+        shell: bash
         run: |
+          set -euo pipefail
           missing=0
           for f in docs/*.md; do
             if ! grep -q "Status:" "$f"; then

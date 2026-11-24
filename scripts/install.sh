@@ -28,8 +28,10 @@ DropPoint installed. Next steps:
      /opt/droppoint/config/credentials.example.yaml for the field list).
   2. Drop SRTM .hgt tiles into /opt/droppoint/data/dem/ if you want
      home-tied DEM elevations (optional).
-  3. Check the install: /opt/droppoint/bin/droppoint --selftest --no-link \
-         --config /opt/droppoint/config
+  3. Check the install as the SERVICE USER (a root run works too, but run it
+     this way to see exactly what the service sees):
+         sudo -u droppoint /opt/droppoint/bin/droppoint --selftest --no-link \
+           --config /opt/droppoint/config
   4. Start the service: systemctl start droppoint.service
      (only needed on a generic companion — on Manifold 3 the app is
      installed through DJI Pilot 2 as a .dpk instead, see docs/).

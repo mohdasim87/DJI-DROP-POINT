@@ -21,6 +21,7 @@ set(DROPPOINT_TEST_SOURCES
     test_pwm_servo_release.cpp
     test_sd_notify.cpp
     test_selftest_report.cpp
+    test_file_ownership.cpp
 )
 
 if(DROPPOINT_BUILD_PSDK)

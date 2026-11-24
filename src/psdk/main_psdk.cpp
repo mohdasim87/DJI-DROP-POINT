@@ -26,6 +26,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -43,6 +44,7 @@
 #include "core/solution.h"
 #include "hal/i_release.h"
 #include "hw/conversions.h"
+#include "hw/file_ownership.h"
 #include "hw/logging_audio.h"
 #include "hw/null_liveview.h"
 #include "hw/operator_inputs.h"
@@ -139,6 +141,59 @@ bool DirIsWritable(const fs::path& dir) {
     if (f == nullptr) return false;
     std::fclose(f);
     std::filesystem::remove(probe, ec);
+    return true;
+}
+
+// A private per-process scratch directory (mkdtemp, mode 0700) for the
+// generated widget files. Widget output is runtime state consumed by the
+// PSDK widget-file registration — never shared install state, so a root
+// selftest cannot leave files the service user cannot overwrite.
+// Base order: $RUNTIME_DIRECTORY (systemd RuntimeDirectory=droppoint ->
+// /run/droppoint, already owned by the service user), then $TMPDIR, then
+// /tmp. Returns "" when no base is writable.
+std::string MakePrivateScratchDir() {
+    std::vector<std::string> bases;
+    if (const char* r = std::getenv("RUNTIME_DIRECTORY"); r != nullptr && *r != '\0') {
+        bases.emplace_back(r);
+    }
+    if (const char* t = std::getenv("TMPDIR"); t != nullptr && *t != '\0') {
+        bases.emplace_back(t);
+    }
+    bases.emplace_back("/tmp");
+    for (const std::string& base : bases) {
+        std::string tmpl = base + "/droppoint-widget-XXXXXX";
+        std::vector<char> buf(tmpl.begin(), tmpl.end());
+        buf.push_back('\0');
+        if (::mkdtemp(buf.data()) != nullptr) return buf.data();
+    }
+    return {};
+}
+
+// Removes the private scratch dir at scope exit, whichever way main leaves.
+struct ScratchDirGuard {
+    std::string path;
+    ~ScratchDirGuard() {
+        if (!path.empty()) {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    }
+};
+
+// Saves the selftest report into the log directory. On failure the caller
+// appends a WARN line so the report never silently loses itself; on success
+// the file is adopted into the log directory's ownership.
+bool SaveSelftestReport(const std::string& log_dir, const std::string& report,
+                        std::string* out_path) {
+    std::error_code ec;
+    std::filesystem::create_directories(log_dir, ec);
+    const std::string path = (fs::path(log_dir) / "selftest.txt").string();
+    if (out_path != nullptr) *out_path = path;
+    FILE* f = std::fopen(path.c_str(), "w");
+    if (f == nullptr) return false;
+    std::fputs(report.c_str(), f);
+    std::fclose(f);
+    droppoint::hw::AdoptOwnerFromDir(path, log_dir);
     return true;
 }
 
@@ -268,11 +323,17 @@ int main(int argc, char** argv) {
                 break;
             }
         }
-        // Inside the (writable) log dir — the service user owns it, while its
-        // parent (e.g. /var/log) is root-owned.
-        const std::string widget_dir = (fs::path(log_dir) / "widget").string();
+        // Widget files live in a private per-process dir (mkdtemp, 0700) —
+        // never inside the shared log dir, where a root selftest would leave
+        // files the service user cannot overwrite. The guard removes it on
+        // exit; the PSDK only needs it while this process lives.
+        const std::string widget_dir = MakePrivateScratchDir();
+        ScratchDirGuard widget_dir_guard{widget_dir};
         bool widget_dir_ok = false;
-        if (!icon_dir.empty()) {
+        if (widget_dir.empty()) {
+            DP_LOG_ERROR("main", "no writable base for the widget scratch dir "
+                                 "(tried $RUNTIME_DIRECTORY, $TMPDIR, /tmp)");
+        } else if (!icon_dir.empty()) {
             std::vector<std::string> payload_names;
             for (const auto& p : cfg.payloads) payload_names.push_back(p.name);
             try {
@@ -365,16 +426,13 @@ int main(int argc, char** argv) {
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
             bool had_fail = false;
-            const std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
+            std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
+            std::string save_path;
+            if (!SaveSelftestReport(log_dir, report, &save_path)) {
+                report += "[WARN] could not save this report to " + save_path + "\n";
+            }
             std::fputs(report.c_str(), stdout);
             std::fflush(stdout);
-            std::error_code ec;
-            std::filesystem::create_directories(log_dir, ec);
-            FILE* f = std::fopen((fs::path(log_dir) / "selftest.txt").string().c_str(), "w");
-            if (f != nullptr) {
-                std::fputs(report.c_str(), f);
-                std::fclose(f);
-            }
             return had_fail ? 1 : 0;
         }
 
@@ -414,7 +472,16 @@ int main(int argc, char** argv) {
         if (probe_position >= 0) {
             CheckDji(DjiCore_ApplicationStart(), "DjiCore_ApplicationStart");
             const std::string probe_dir = (fs::path(log_dir) / "probe").string();
-            return droppoint::psdk::ProbeWidgets(probe_position, probe_dir);
+            const int probe_rc = droppoint::psdk::ProbeWidgets(probe_position, probe_dir);
+            // Files a root probe run leaves in the log dir must stay
+            // writable by the service user.
+            droppoint::hw::AdoptOwnerFromDir(probe_dir, log_dir);
+            std::error_code probe_ec;
+            for (const auto& entry :
+                 std::filesystem::directory_iterator(probe_dir, probe_ec)) {
+                droppoint::hw::AdoptOwnerFromDir(entry.path().string(), log_dir);
+            }
+            return probe_rc;
         }
 
         // ---- operator widgets -------------------------------------------------
@@ -497,19 +564,22 @@ int main(int argc, char** argv) {
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
             bool had_fail = false;
-            const std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
+            std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
+            std::string save_path;
+            if (!SaveSelftestReport(log_dir, report, &save_path)) {
+                report += "[WARN] could not save this report to " + save_path + "\n";
+            }
             std::fputs(report.c_str(), stdout);
             std::fflush(stdout);
-            FILE* f = std::fopen((fs::path(log_dir) / "selftest.txt").string().c_str(), "w");
-            if (f != nullptr) {
-                std::fputs(report.c_str(), f);
-                std::fclose(f);
-            }
             return had_fail ? 1 : 0;
         }
 
         // ---- guidance loop config ------------------------------------------------
-        droppoint::util::DropLog drop_log((fs::path(log_dir) / "drops.csv").string());
+        const std::string drops_path = (fs::path(log_dir) / "drops.csv").string();
+        droppoint::util::DropLog drop_log(drops_path);
+        // A root run (sudo selftest/debug) must not leave drops.csv root-owned
+        // — the service user appends to it on every release.
+        droppoint::hw::AdoptOwnerFromDir(drops_path, log_dir);
 
         droppoint::app::GuidanceLoopConfig loop_cfg;
         loop_cfg.gate_thresholds = cfg.system.gate_thresholds;
