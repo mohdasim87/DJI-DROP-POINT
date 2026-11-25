@@ -217,105 +217,21 @@ jobs:
             DEB="$(ls dist/droppoint-${profile}_*_arm64.deb | head -1)"
             echo "=== install test: $profile ($DEB) ==="
             docker run --rm -v "$PWD/dist:/dist:ro" \
-              -v "$PWD/tests/data/credentials_test.yaml:/creds/credentials_test.yaml:ro" \
-              arm64v8/ubuntu:20.04 bash -xc "
-              set -e
-              export DEBIAN_FRONTEND=noninteractive
-              dpkg -i '/dist/$(basename $DEB)'
-              /opt/droppoint/bin/droppoint --version
-              /opt/droppoint/bin/droppoint --list-kits
-              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config || {
-                echo '::error::selftest failed — dumping report log if present'
-                cat /var/log/droppoint/selftest.txt ./data/logs/selftest.txt 2>/dev/null || true
-                exit 1
-              }
-              # the service runs as user 'droppoint' — the selftest must pass
-              # without root; widget files are per-process so ownership of the
-              # log dir must not matter for them
-              runuser -u droppoint -- /opt/droppoint/bin/droppoint \
-                --selftest --no-link --config /opt/droppoint/config | tee /tmp/st-$profile.log
-              test \${PIPESTATUS[0]} -eq 0 || {
-                echo '::error::non-root selftest failed — dumping report log'
-                cat /var/log/droppoint/selftest.txt 2>/dev/null || true
-                exit 1
-              }
-              grep -q '\[OK\] widget files generated' /tmp/st-$profile.log
-              grep -q '\[INFO\] drop kit:' /tmp/st-$profile.log
-              # m4t expects the SDK certified chip on /dev/i2c-1: in a
-              # container with no I2C node the probe must exit 2 naming the
-              # missing device node
-              if [ $profile = m4t ]; then
-                set +e
-                /opt/droppoint/bin/droppoint --check-auth-chip \
-                  --config /opt/droppoint/config > /tmp/chip.log 2>&1
-                CHIP_RC=\$?
-                set -e
-                test \$CHIP_RC -eq 2
-                grep -q 'device node' /tmp/chip.log
-              fi
-              # the report the ROOT run wrote must have been adopted into the
-              # log dir's ownership — the service user can overwrite it
-              runuser -u droppoint -- sh -c 'test -w /var/log/droppoint/selftest.txt'
-              # alternating owners must keep working: root again, then the
-              # service user again
-              /opt/droppoint/bin/droppoint --selftest --no-link --config /opt/droppoint/config
-              runuser -u droppoint -- /opt/droppoint/bin/droppoint \
-                --selftest --no-link --config /opt/droppoint/config
-              /opt/droppoint/bin/droppoint_sim_main --sim hover --profile /opt/droppoint/config | tee /tmp/sim-$profile.log
-              test \${PIPESTATUS[0]} -eq 0
-              grep -Eq 'SUMMARY.*fired=1' /tmp/sim-$profile.log || {
-                echo '::error::hover sim did not fire for profile'
-                cat /tmp/sim-$profile.log
-                exit 1
-              }
-              # the Manifold 3 customer flow as an unprivileged user: unpack
-              # the .deb, build the .dpk with the bundled tool, check it
-              if [ $profile = m400 ]; then
-                echo '=== make-dpk ==='
-                useradd -m customer 2>/dev/null || true
-                mkdir -p /tmp/mkdpk && chown customer /tmp/mkdpk
-                cp "/dist/$(basename $DEB)" /tmp/mkdpk/
-                runuser -u customer -- bash -c '
-                  set -e
-                  cd /tmp/mkdpk
-                  dpkg-deb -x droppoint-m400_*.deb dp
-                  dp/opt/droppoint/bin/droppoint-make-dpk \
-                    --credentials /creds/credentials_test.yaml --out .
-                  dpkg-deb -c DropPoint-M400_v*.dpk | tee listing.txt
-                  grep -q "bin/droppoint" listing.txt
-                  grep -q "config/aircraft.yaml" listing.txt
-                  grep -q "config/credentials.yaml" listing.txt
-                  grep -q "assets/widget/" listing.txt
-                  if dp/opt/droppoint/bin/droppoint-make-dpk \
-                      --credentials dp/opt/droppoint/config/credentials.example.yaml \
-                      --out . 2>refuse.log; then
-                    echo "make-dpk accepted placeholder credentials" >&2
-                    exit 1
-                  fi
-                  grep -qi placeholder refuse.log
-                '
-                echo '=== end make-dpk ==='
-              fi
-              # upgrade-marker survival: site config edit, real credentials,
-              # and the log dir must all survive a reinstall
-              echo '# site edit marker' >> /opt/droppoint/config/payloads.yaml
-              echo 'marker: survives' >> /etc/droppoint/credentials.yaml
-              touch /var/log/droppoint/marker_file
-              dpkg -i '/dist/$(basename $DEB)'
-              grep -q 'site edit marker' /opt/droppoint/config/payloads.yaml
-              grep -q 'marker: survives' /etc/droppoint/credentials.yaml
-              test -f /var/log/droppoint/marker_file
-              # removal: credentials + logs are site data, never removed
-              dpkg -r droppoint-$profile
-              test -f /etc/droppoint/credentials.yaml
-              test -d /var/log/droppoint
-              echo INSTALL TEST $profile PASSED
-            " 2>&1 | tee "install-$profile.log"
+              -v "$PWD/scripts/ci:/ci:ro" \
+              -v "$PWD/tests/data:/creds:ro" \
+              arm64v8/ubuntu:20.04 \
+              bash /ci/install_test.sh "$profile" "/dist/$(basename "$DEB")" /creds/credentials_test.yaml \
+              2>&1 | tee "install-$profile.log"
+            test "${PIPESTATUS[0]}" -eq 0
             # host-side assertions: independent of the container's exit code,
             # so a mid-script death can never look like a pass
             grep -q "INSTALL TEST $profile PASSED" "install-$profile.log"
             grep -Eq 'SUMMARY.*fired=1' "install-$profile.log"
             grep -q 'drop kit:' "install-$profile.log"
+            if [ "$profile" = m400 ]; then
+              grep -q '=== make-dpk ===' "install-$profile.log"
+              grep -q '=== end make-dpk ===' "install-$profile.log"
+            fi
             if grep -q '\[FAIL\]' "install-$profile.log"; then
               echo "::error::install log for $profile contains a [FAIL] line"
               exit 1
