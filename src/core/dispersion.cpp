@@ -6,16 +6,17 @@
 #include <vector>
 
 #include "geodesy.h"
+#include "normal_sampler.h"
 #include "wind.h"
 
 namespace droppoint::core::dispersion {
 
 DispersionResult RunMonteCarlo(const MonteCarloInputs& in) {
     std::mt19937_64 rng(in.seed);
-    std::normal_distribution<double> wind_speed_noise(0.0, in.wind_gust_sigma_mps);
-    std::normal_distribution<double> wind_bearing_noise(0.0, in.wind_bearing_sigma_rad);
-    std::normal_distribution<double> cda_noise(1.0, in.cda_sigma_fraction);
-    std::normal_distribution<double> timing_noise(0.0, in.release_timing_sigma_s);
+    NormalSampler wind_speed_noise(0.0, in.wind_gust_sigma_mps);
+    NormalSampler wind_bearing_noise(0.0, in.wind_bearing_sigma_rad);
+    NormalSampler cda_noise(1.0, in.cda_sigma_fraction);
+    NormalSampler timing_noise(0.0, in.release_timing_sigma_s);
 
     // Deterministic baseline impact point (release at e=n=0 in the forward
     // integrator's own frame).

@@ -68,6 +68,17 @@ struct ReleaseConfig {
     int widget_safe_value = 0;
 };
 
+// The `auth_chip:` map in aircraft.yaml: the DJI SDK Certified Chip the
+// Matrice 4 series requires on the payload side (docs/SETUP-MANUAL.md 5.3).
+// It sits on an I2C bus at 0x2A and needs NRST pulsed at power-up.
+struct AuthChipConfig {
+    bool enabled = false;
+    std::string i2c_device = "/dev/i2c-1";
+    std::string reset_gpio_chip = "/dev/gpiochip0";
+    int reset_gpio_line = 4;
+    int reset_pulse_ms = 25;
+};
+
 struct AircraftConfig {
     std::string model;
     double cda_airframe = 0.0;
@@ -92,6 +103,7 @@ struct AircraftConfig {
     int baud_rate = 921600;
     bool pps_available = false;
     ReleaseConfig release;
+    AuthChipConfig auth_chip;
 };
 
 struct LensProfile {

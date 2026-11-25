@@ -50,6 +50,10 @@ MAIN_BIN="$(find_bin droppoint)" || {
     exit 1
 }
 
+# droppoint-make-dpk ships in both debs: it only does something on the m400
+# profile (it refuses a non-manifold3 aircraft.yaml), but the tool itself is
+# profile-independent and the m4t deb is a convenient transport.
+
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 PKG="droppoint-${PROFILE}_${VERSION}_arm64"
@@ -61,7 +65,8 @@ mkdir -p "$PKGDIR/DEBIAN" \
          "$PKGDIR/opt/droppoint/assets" \
          "$PKGDIR/opt/droppoint/data/dem" \
          "$PKGDIR/opt/droppoint/dashboard" \
-         "$PKGDIR/lib/systemd/system"
+         "$PKGDIR/lib/systemd/system" \
+         "$PKGDIR/lib/udev/rules.d"
 
 # --- binaries ---------------------------------------------------------------
 cp "$MAIN_BIN" "$PKGDIR/opt/droppoint/bin/droppoint"
@@ -72,6 +77,7 @@ for tool in droppoint_sim_main droppoint_calibrate droppoint_replay droppoint_le
         echo "warning: $tool not found under $BUILD_DIR — packaging without it" >&2
     fi
 done
+cp "$ROOT/scripts/droppoint-make-dpk" "$PKGDIR/opt/droppoint/bin/droppoint-make-dpk"
 chmod 755 "$PKGDIR/opt/droppoint/bin/"* || true
 
 # glibc-only dependency check: anything beyond libc/libm/libpthread/
@@ -94,6 +100,7 @@ if [[ -d "$ROOT/tools/dashboard" ]]; then
     cp -r "$ROOT/tools/dashboard/." "$PKGDIR/opt/droppoint/dashboard/"
 fi
 cp "$ROOT/scripts/droppoint.service" "$PKGDIR/lib/systemd/system/"
+cp "$ROOT/packaging/udev/60-droppoint.rules" "$PKGDIR/lib/udev/rules.d/"
 
 # --- DEBIAN metadata -----------------------------------------------------------
 INSTALLED_SIZE=$(du -sk "$PKGDIR" | cut -f1)
@@ -128,6 +135,17 @@ if ! getent passwd droppoint >/dev/null; then
 fi
 # dialout: serial access to the E-Port USB-UART adapter.
 usermod -aG dialout droppoint 2>/dev/null || true
+# i2c + gpio: the SDK Certified Chip bus (Matrice 4 series) and its reset
+# line. Create the system groups when the platform has none yet, then add
+# the service user — the udev rules in /lib/udev/rules.d/60-droppoint.rules
+# give those groups read/write on the device nodes.
+for g in i2c gpio; do
+    if ! getent group "$g" >/dev/null; then
+        addgroup --system "$g" 2>/dev/null || groupadd -r "$g" 2>/dev/null || true
+    fi
+    usermod -aG "$g" droppoint 2>/dev/null || true
+done
+udevadm control --reload-rules 2>/dev/null || true
 
 mkdir -p /var/log/droppoint
 chown -R droppoint:droppoint /var/log/droppoint

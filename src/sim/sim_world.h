@@ -12,6 +12,7 @@
 #include <optional>
 #include <random>
 
+#include "core/normal_sampler.h"
 #include "core/solution.h"
 #include "scenario.h"
 
@@ -74,7 +75,10 @@ private:
     core::EnuVector commanded_velocity_{0, 0, 0};
     double heading_rad_ = 0.0;  // compass heading, rad
     mutable std::mt19937_64 rng_;
-    mutable std::normal_distribution<double> jitter_dist_;
+    // NormalSampler, not a bare distribution: telemetry_jitter_ms == 0 would
+    // construct one with sigma 0 — a precondition violation that aborts
+    // under MSVC Debug (see core/normal_sampler.h).
+    mutable core::NormalSampler jitter_dist_;
 
     bool truth_impact_valid_ = false;
     core::EnuPoint truth_impact_{};

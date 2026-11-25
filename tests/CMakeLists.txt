@@ -23,6 +23,7 @@ set(DROPPOINT_TEST_SOURCES
     test_selftest_report.cpp
     test_file_ownership.cpp
     test_drop_kits.cpp
+    test_auth_chip.cpp
 )
 
 if(DROPPOINT_BUILD_PSDK)

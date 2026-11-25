@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# droppoint-make-dpk — build the Manifold 3 install package (.dpk) from an
+# unpacked droppoint .deb. Self-contained: needs only coreutils, sed, grep
+# and dpkg-deb — no Python, no PSDK checkout, no network. Runs as an
+# unprivileged user (the Manifold 3 'dji' user has no root).
+#
+#   droppoint-make-dpk --credentials <file> [--out <dir>] [--root <dir>]
+#
+# --root is the staged /opt/droppoint directory; it defaults to the
+# directory above this script's bin/ so it works straight from a
+# `dpkg-deb -x droppoint-m400_*.deb dp` tree (dp/opt/droppoint).
+#
+# The result — DropPoint-<MODEL>_v<xx.xx.xx.xx>.dpk — installs through
+# DJI Pilot 2 or `dji_app_ctl install -i <file>.dpk` on the Manifold 3.
+# The control file is written exactly as DJI's tools/build_dpk/
+# build_dpk.sh writes it for the values in packaging/manifold3/app.json.in.
+set -euo pipefail
+
+die() { echo "droppoint-make-dpk: $*" >&2; exit 1; }
+
+CREDENTIALS=""
+OUT_DIR="."
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --credentials) CREDENTIALS="${2:?--credentials needs a file}"; shift 2 ;;
+        --out)         OUT_DIR="${2:?--out needs a directory}"; shift 2 ;;
+        --root)        ROOT="${2:?--root needs a directory}"; shift 2 ;;
+        -h|--help)
+            grep '^#' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        *) die "unknown argument '$1' (usage: droppoint-make-dpk --credentials <file> [--out <dir>] [--root <dir>])" ;;
+    esac
+done
+
+[[ -n "$CREDENTIALS" ]] || die "--credentials <file> is required"
+[[ -f "$CREDENTIALS" ]] || die "credentials file '$CREDENTIALS' not found"
+[[ -d "$ROOT/bin" && -d "$ROOT/config" ]] || \
+    die "--root '$ROOT' does not look like an unpacked /opt/droppoint (expected bin/ and config/)"
+[[ -x "$ROOT/bin/droppoint" || -f "$ROOT/bin/droppoint" ]] || \
+    die "no droppoint binary at $ROOT/bin/droppoint"
+
+# Refuse the shipped example file: the placeholders are no credentials.
+if grep -qE 'your_app_(id|key|name)|your-license|your_developer' "$CREDENTIALS"; then
+    die "credentials file still contains the credentials.example.yaml placeholders — fill in real DJI developer values"
+fi
+
+AIRCRAFT_YAML="$ROOT/config/aircraft.yaml"
+[[ -f "$AIRCRAFT_YAML" ]] || die "no aircraft.yaml under $ROOT/config"
+
+yaml_scalar() {  # yaml_scalar <file> <key> -> value without quotes/comment
+    sed -n "s/^[[:space:]]*$2:[[:space:]]*\"\?\([^\"#]*\)\"\?.*/\1/p" "$1" \
+        | head -1 | sed 's/[[:space:]]*$//'
+}
+
+PLATFORM="$(yaml_scalar "$AIRCRAFT_YAML" psdk_platform)"
+[[ "$PLATFORM" == "manifold3" ]] || die \
+    "this profile's psdk_platform is '${PLATFORM:-<unset>}', not manifold3 — \
+a .dpk only runs on DJI's Manifold 3; this profile is for a generic \
+companion-computer build (use the .deb instead)"
+
+MODEL="$(yaml_scalar "$AIRCRAFT_YAML" model)"
+[[ -n "$MODEL" ]] || die "cannot read model from $AIRCRAFT_YAML"
+NAME_EN="DropPoint-$MODEL"
+
+APP_ID="$(yaml_scalar "$CREDENTIALS" app_id)"
+[[ "$APP_ID" =~ ^[0-9]+$ ]] || die "cannot read a numeric app_id from $CREDENTIALS"
+
+# The .dpk Version must equal what the binary registers via
+# DjiCore_SetFirmwareVersion — derive it from the binary itself.
+VER_LINE="$("$ROOT/bin/droppoint" --version 2>/dev/null)" || \
+    die "could not run $ROOT/bin/droppoint --version (wrong architecture for this machine?)"
+SEMVER="$(echo "$VER_LINE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+[[ -n "$SEMVER" ]] || die "cannot parse a version from '$VER_LINE'"
+IFS=. read -r VMAJ VMIN VPAT <<<"$SEMVER"
+FW_VERSION="$(printf '%02d.%02d.%02d.00' "$VMAJ" "$VMIN" "$VPAT")"
+
+DESC_EN="DropPoint precision payload-drop guidance for DJI aircraft."
+MAINTAINER="DropPoint Maintainer"
+PKG="${NAME_EN}_v${FW_VERSION}"
+
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+PKGDIR="$STAGE/$PKG"
+
+mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/bin" "$PKGDIR/config/dem" \
+         "$PKGDIR/data" "$PKGDIR/data/logs" "$PKGDIR/data/media"
+
+# --- control file: same fields, same order as DJI's build_dpk.sh writes for
+# --- packaging/manifold3/app.json.in -------------------------------------
+cat > "$PKGDIR/DEBIAN/control" <<EOF
+Id: $APP_ID
+Package: $NAME_EN
+Format_Version: 3
+Is_Ai_Rendering: false
+Name_CN: $NAME_EN
+Name_EN: $NAME_EN
+Name_JP: $NAME_EN
+Name_FR: $NAME_EN
+Description: $DESC_EN
+Description_CN: $DESC_EN
+Description_EN: $DESC_EN
+Description_JP: $DESC_EN
+Description_FR: $DESC_EN
+Version: $FW_VERSION
+Platform: manifold3
+Maintainer: $MAINTAINER
+Maintainer_CN: $MAINTAINER
+Maintainer_EN: $MAINTAINER
+Maintainer_JP: $MAINTAINER
+Maintainer_FR: $MAINTAINER
+Architecture: all
+Binary: bin/droppoint
+Ver_Min: 00.00.00.00
+Ver_Max: 99.99.99.99
+EOF
+
+# --- payload ---------------------------------------------------------------
+install -m 755 "$ROOT/bin/droppoint" "$PKGDIR/bin/droppoint"
+
+# userconfig paths land at the package root: config/ then assets/.
+for f in "$ROOT"/config/*.yaml; do
+    # the example file ships no real values; never pack it into a customer dpk
+    [[ "$(basename "$f")" == "credentials.example.yaml" ]] && continue
+    install -m 644 "$f" "$PKGDIR/config/"
+done
+install -m 600 "$CREDENTIALS" "$PKGDIR/config/credentials.yaml"
+
+[[ -d "$ROOT/assets" ]] && cp -r "$ROOT/assets" "$PKGDIR/assets"
+if [[ -d "$ROOT/data/dem" ]]; then
+    cp "$ROOT/data/dem/"*.hgt "$PKGDIR/config/dem/" 2>/dev/null || true
+fi
+
+dpkg-deb --build "$PKGDIR" "$OUT_DIR/$PKG.dpk" >/dev/null
+
+echo "built $OUT_DIR/$PKG.dpk"
+echo "NOTE: this file contains your DJI app credentials — do not share it."
+echo "Install it on the Manifold 3 via DJI Pilot 2 or: dji_app_ctl install -i $PKG.dpk"

@@ -19,6 +19,7 @@
 #include "sim/sim_hal.h"
 #include "sim/sim_world.h"
 #include "util/config.h"
+#include "util/crt_silence.h"
 #include "util/drop_kits.h"
 #include "util/logging.h"
 #include "util/version.h"
@@ -303,6 +304,7 @@ int RunSim(const std::string& scenario_name, const std::string& profile_dir, boo
 }  // namespace
 
 int main(int argc, char** argv) {
+    droppoint::util::SilenceCrtDialogs();
     std::string scenario;
     std::string config_dir = "config";
     std::string profile_dir;

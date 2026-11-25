@@ -133,6 +133,28 @@ AircraftConfig LoadAircraftConfig(const std::string& path) {
     cfg.baud_rate = OptionalField(root, "baud_rate", 921600);
     cfg.pps_available = OptionalField(root, "pps_available", false);
 
+    if (root["auth_chip"]) {
+        const YAML::Node a = root["auth_chip"];
+        cfg.auth_chip.enabled = OptionalField(a, "enabled", cfg.auth_chip.enabled);
+        cfg.auth_chip.i2c_device =
+            OptionalField<std::string>(a, "i2c_device", cfg.auth_chip.i2c_device);
+        cfg.auth_chip.reset_gpio_chip = OptionalField<std::string>(
+            a, "reset_gpio_chip", cfg.auth_chip.reset_gpio_chip);
+        cfg.auth_chip.reset_gpio_line =
+            OptionalField(a, "reset_gpio_line", cfg.auth_chip.reset_gpio_line);
+        cfg.auth_chip.reset_pulse_ms =
+            OptionalField(a, "reset_pulse_ms", cfg.auth_chip.reset_pulse_ms);
+    }
+    if (cfg.auth_chip.enabled && cfg.auth_chip.i2c_device.empty()) {
+        throw ConfigError(ctx + ": auth_chip.i2c_device must be non-empty when "
+                                "auth_chip is enabled");
+    }
+    if (cfg.auth_chip.enabled && cfg.psdk_platform == PsdkPlatform::kManifold3) {
+        throw ConfigError(
+            ctx + ": auth_chip must not be enabled on Manifold 3 — the certified "
+                  "chip is inside DJI's own cable path there");
+    }
+
     if (root["release"]) {
         const YAML::Node r = root["release"];
         const std::string rctx = ctx + " (release)";

@@ -126,6 +126,35 @@ std::string BuildSelftestReport(const SelftestFacts& in, bool* had_fail) {
     }
     Line(os, "INFO", "PPS time synchronisation: not implemented in this build");
 
+    // The DJI SDK Certified Chip — required before PSDK works on the
+    // Matrice 4 series; on M400 builds it is inside DJI's cable path.
+    if (cfg.aircraft.auth_chip.enabled) {
+        Line(os, "INFO", "SDK certified chip: enabled on " +
+                             cfg.aircraft.auth_chip.i2c_device + ", reset " +
+                             cfg.aircraft.auth_chip.reset_gpio_chip + " line " +
+                             std::to_string(cfg.aircraft.auth_chip.reset_gpio_line));
+        if (!in.auth_chip_i2c_node_present || !in.auth_chip_gpio_node_present) {
+            std::string missing;
+            if (!in.auth_chip_i2c_node_present) {
+                missing = cfg.aircraft.auth_chip.i2c_device;
+            }
+            if (!in.auth_chip_gpio_node_present) {
+                if (!missing.empty()) missing += " and ";
+                missing += cfg.aircraft.auth_chip.reset_gpio_chip;
+            }
+            if (in.link) {
+                Line(os, "FAIL", "SDK certified chip device nodes missing: " + missing +
+                                     " — check the wiring (docs/SETUP-MANUAL.md 5.3)");
+                fail = true;
+            } else {
+                Line(os, "WARN", "SDK certified chip device nodes not present: " + missing +
+                                     " (expected on the aircraft, not on this machine)");
+            }
+        }
+    } else {
+        Line(os, "INFO", "SDK certified chip: not required for this build");
+    }
+
     if (in.widget_dir_ok) {
         Line(os, "OK", "widget files generated: " + in.widget_dir);
     } else {

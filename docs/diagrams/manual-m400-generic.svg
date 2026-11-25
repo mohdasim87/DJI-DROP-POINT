@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1180" height="640" fill="#ffffff"/>
+  <style>
+    .box { fill: #f4f7fb; stroke: #3d5a80; stroke-width: 2.5; rx: 10; }
+    .air { fill: #e8f0e8; stroke: #2f6b3a; }
+    .ttl { fill: #fdf4e7; stroke: #b5651d; }
+    .pi { fill: #fdfdfd; stroke: #3d5a80; }
+    .title { font-size: 22px; font-weight: bold; fill: #1d3557; }
+    .sub { font-size: 17px; fill: #33415c; }
+    .port { font-size: 17px; font-weight: bold; fill: #33415c; }
+    .pin { font-size: 17.5px; font-weight: bold; fill: #1d3557; }
+    .pinname { font-size: 17px; fill: #33415c; }
+    .lg { font-size: 17px; fill: #33415c; }
+  </style>
+
+  <!-- ===================== Matrice 400 ===================== -->
+  <rect class="box air" x="30" y="90" width="210" height="160" rx="10"/>
+  <text class="title" x="135" y="130" text-anchor="middle">Matrice 400</text>
+  <rect x="180" y="150" width="60" height="40" rx="6" fill="#ffffff" stroke="#2f6b3a" stroke-width="2"/>
+  <text class="sub" x="210" y="175" text-anchor="middle">E-Port V2</text>
+  <text class="sub" x="135" y="225" text-anchor="middle">(powered off)</text>
+
+  <!-- coaxial cable with the certified chip inside -->
+  <line x1="240" y1="170" x2="380" y2="170" stroke="#555" stroke-width="9"/>
+  <line x1="240" y1="170" x2="380" y2="170" stroke="#999" stroke-width="5"/>
+  <text class="sub" x="310" y="145" text-anchor="middle">coaxial cable</text>
+  <text class="sub" x="310" y="205" text-anchor="middle">certified chip</text>
+  <text class="sub" x="310" y="223" text-anchor="middle">inside the cable</text>
+
+  <!-- ===================== E-Port V2 dev board ===================== -->
+  <rect class="box" x="380" y="70" width="250" height="240" rx="10"/>
+  <text class="title" x="505" y="105" text-anchor="middle">E-Port V2</text>
+  <text class="title" x="505" y="128" text-anchor="middle">Development board</text>
+  <text class="sub" x="505" y="155" text-anchor="middle">USB toggle → external</text>
+  <text class="sub" x="505" y="174" text-anchor="middle">USB port</text>
+  <rect x="565" y="195" width="65" height="30" rx="6" fill="#ffffff" stroke="#3d5a80" stroke-width="2"/>
+  <text class="sub" x="597" y="215" text-anchor="middle">USB out</text>
+  <text class="port" x="505" y="258" text-anchor="middle">5 V XT30 output</text>
+  <circle cx="505" cy="275" r="5" fill="#c1121f"/>
+
+  <!-- USB link board -> TTL -->
+  <line x1="630" y1="210" x2="680" y2="210" stroke="#1d6fd1" stroke-width="3.5"/>
+  <polygon points="680,210 666,204 666,216" fill="#1d6fd1"/>
+
+  <!-- ===================== USB-to-TTL ===================== -->
+  <rect class="box ttl" x="680" y="140" width="170" height="140" rx="10"/>
+  <text class="title" x="765" y="175" text-anchor="middle">USB-to-TTL</text>
+  <text class="sub" x="765" y="197" text-anchor="middle">FT232 / CP2102</text>
+  <text class="sub" x="765" y="216" text-anchor="middle">3.3 V</text>
+  <text class="port" x="844" y="240" text-anchor="end">TXD</text>
+  <text class="port" x="844" y="264" text-anchor="end">RXD</text>
+  <text class="port" x="844" y="286" text-anchor="end">GND</text>
+  <circle cx="850" cy="235" r="5" fill="#1d6fd1"/>
+  <circle cx="850" cy="259" r="5" fill="#0f9d8f"/>
+  <circle cx="850" cy="281" r="5" fill="#222222"/>
+
+  <!-- ===================== Raspberry Pi ===================== -->
+  <rect class="box pi" x="860" y="60" width="290" height="480" rx="10"/>
+  <text class="title" x="1005" y="95" text-anchor="middle">Raspberry Pi</text>
+  <text class="sub" x="1005" y="117" text-anchor="middle">header pins used</text>
+
+  <!-- pin 2 -->
+  <rect x="885" y="140" width="240" height="36" rx="6" fill="#ffe9e9" stroke="#c1121f" stroke-width="2"/>
+  <circle cx="901" cy="158" r="5" fill="#c1121f"/>
+  <text class="pin" x="913" y="163">2</text>
+  <text class="pinname" x="935" y="163">5 V — board XT30</text>
+  <!-- pin 6 -->
+  <rect x="885" y="192" width="240" height="36" rx="6" fill="#eeeeee" stroke="#222222" stroke-width="2"/>
+  <circle cx="901" cy="210" r="5" fill="#222222"/>
+  <text class="pin" x="913" y="215">6</text>
+  <text class="pinname" x="935" y="215">GND — XT30 + TTL</text>
+  <!-- pin 8 -->
+  <rect x="885" y="244" width="240" height="36" rx="6" fill="#ddf3f1" stroke="#0f9d8f" stroke-width="2"/>
+  <circle cx="901" cy="262" r="5" fill="#0f9d8f"/>
+  <text class="pin" x="913" y="267">8</text>
+  <text class="pinname" x="935" y="267">GPIO14 (TXD) — TTL RXD</text>
+  <!-- pin 10 -->
+  <rect x="885" y="296" width="240" height="36" rx="6" fill="#e0ecfb" stroke="#1d6fd1" stroke-width="2"/>
+  <circle cx="901" cy="314" r="5" fill="#1d6fd1"/>
+  <text class="pin" x="913" y="319">10</text>
+  <text class="pinname" x="941" y="319">GPIO15 (RXD) — TTL TXD</text>
+
+  <text class="sub" x="1005" y="380" text-anchor="middle">TX and RX cross over;</text>
+  <text class="sub" x="1005" y="402" text-anchor="middle">pin 6 carries both grounds</text>
+  <text class="sub" x="1005" y="450" text-anchor="middle">No certified-chip wiring:</text>
+  <text class="sub" x="1005" y="472" text-anchor="middle">it is inside the cable</text>
+
+  <!-- wires TTL -> pi -->
+  <path d="M 850 235 C 830 235, 830 314, 885 314" fill="none" stroke="#1d6fd1" stroke-width="3.5"/>
+  <path d="M 850 259 C 835 259, 835 262, 885 262" fill="none" stroke="#0f9d8f" stroke-width="3.5"/>
+  <path d="M 850 281 C 820 281, 830 210, 885 210" fill="none" stroke="#222222" stroke-width="3.5"/>
+
+  <!-- wires XT30 5V -> pins 2 and 6 -->
+  <path d="M 445 275 C 505 340, 700 420, 760 420 C 830 420, 820 158, 885 158"
+        fill="none" stroke="#c1121f" stroke-width="3.5"/>
+  <path d="M 445 275 C 505 350, 690 440, 755 440 C 825 440, 820 210, 885 210"
+        fill="none" stroke="#222222" stroke-width="3.5"/>
+
+  <!-- legend -->
+  <rect x="30" y="470" width="480" height="140" rx="8" fill="#f7f7f7" stroke="#999" stroke-width="1"/>
+  <text class="title" x="50" y="498" font-size="16">Wire colours</text>
+  <line x1="50" y1="520" x2="90" y2="520" stroke="#c1121f" stroke-width="4"/><text class="lg" x="100" y="525">5 V (XT30)</text>
+  <line x1="50" y1="545" x2="90" y2="545" stroke="#222222" stroke-width="4"/><text class="lg" x="100" y="550">GND</text>
+  <line x1="230" y1="520" x2="270" y2="520" stroke="#1d6fd1" stroke-width="4"/><text class="lg" x="280" y="525">TTL TXD → Pi RXD</text>
+  <line x1="230" y1="545" x2="270" y2="545" stroke="#0f9d8f" stroke-width="4"/><text class="lg" x="280" y="550">TTL RXD → Pi TXD</text>
+  <line x1="50" y1="575" x2="90" y2="575" stroke="#1d6fd1" stroke-width="4" stroke-dasharray="6,5"/><text class="lg" x="100" y="580">USB (inside cable)</text>
+</svg>

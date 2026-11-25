@@ -22,6 +22,10 @@ Group=droppoint
 # install by hand, run the self-test the same way the service runs:
 #   sudo -u droppoint /opt/droppoint/bin/droppoint --selftest --no-link \
 #     --config /opt/droppoint/config
+# i2c and gpio (the SDK certified chip's bus and reset line) come from the
+# postinst's usermod, not from this unit: those groups do not exist on every
+# platform and a missing SupplementaryGroups entry would stop the unit from
+# starting.
 SupplementaryGroups=dialout
 LogsDirectory=droppoint
 RuntimeDirectory=droppoint

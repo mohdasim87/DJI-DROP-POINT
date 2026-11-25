@@ -36,6 +36,8 @@ endif()
 add_library(droppoint_psdk STATIC
     app_registration.cpp
     app_registration.h
+    hal_i2c.cpp
+    hal_i2c.h
     hal_uart.cpp
     hal_uart.h
     platform_linux.cpp

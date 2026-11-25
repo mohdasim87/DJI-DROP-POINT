@@ -221,3 +221,47 @@ TEST_CASE("SelftestReport: onboard equipment lighter than the kit warns") {
             std::string::npos);
     REQUIRE(!had_fail);
 }
+
+TEST_CASE("SelftestReport: auth chip INFO line, missing nodes WARN without link") {
+    const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m4t");
+    auto f = NoLinkFacts(cfg);
+    f.credentials_parsed = true;
+    f.credentials_placeholder = true;
+    bool had_fail = false;
+    const std::string r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(r.find("[INFO] SDK certified chip: enabled on /dev/i2c-1, reset "
+                   "/dev/gpiochip0 line 4") != std::string::npos);
+    REQUIRE(r.find("[WARN] SDK certified chip device nodes not present: /dev/i2c-1 and "
+                   "/dev/gpiochip0") != std::string::npos);
+    REQUIRE(!had_fail);
+}
+
+TEST_CASE("SelftestReport: auth chip nodes present -> no WARN; with link missing is FAIL") {
+    const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m4t");
+    auto f = NoLinkFacts(cfg);
+    f.credentials_parsed = true;
+    f.credentials_placeholder = true;
+    f.auth_chip_i2c_node_present = true;
+    f.auth_chip_gpio_node_present = true;
+    bool had_fail = false;
+    std::string r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(r.find("SDK certified chip device nodes") == std::string::npos);
+
+    f.auth_chip_i2c_node_present = false;
+    f.link = true;
+    r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(r.find("[FAIL] SDK certified chip device nodes missing") !=
+            std::string::npos);
+    REQUIRE(had_fail);
+}
+
+TEST_CASE("SelftestReport: chip not required for the m400 build") {
+    const auto cfg = config::LoadAll(ConfigRoot() + "/profiles/m400");
+    auto f = NoLinkFacts(cfg);
+    f.credentials_parsed = true;
+    f.credentials_placeholder = true;
+    bool had_fail = false;
+    const std::string r = BuildSelftestReport(f, &had_fail);
+    REQUIRE(r.find("[INFO] SDK certified chip: not required for this build") !=
+            std::string::npos);
+}

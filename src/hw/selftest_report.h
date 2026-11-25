@@ -48,6 +48,8 @@ struct SelftestFacts {
     std::string aircraft_reported;  // model string from the FC, link mode only
     std::string widget_dir;         // generated widget dir (checked on disk)
     bool widget_dir_ok = false;
+    bool auth_chip_i2c_node_present = false;   // auth_chip.i2c_device exists
+    bool auth_chip_gpio_node_present = false;  // auth_chip.reset_gpio_chip exists
 };
 
 // One [OK]/[WARN]/[FAIL]/[SKIP]/[INFO] line per check, in a stable order.

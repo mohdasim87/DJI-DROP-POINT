@@ -1,0 +1,6 @@
+# DropPoint uses the I2C bus for the DJI SDK Certified Chip (required on the
+# Matrice 4 series) and a gpiochip line for its NRST pulse. The postinst
+# script creates the i2c and gpio system groups when missing and adds the
+# droppoint user to them; these rules give the groups read/write on the nodes.
+SUBSYSTEM=="i2c-dev", GROUP="i2c", MODE="0660"
+KERNEL=="gpiochip*", SUBSYSTEM=="gpio", GROUP="gpio", MODE="0660"

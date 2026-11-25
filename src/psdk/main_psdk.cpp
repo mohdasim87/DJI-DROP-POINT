@@ -62,6 +62,7 @@
 #include "psdk/probe_widgets.h"
 #include "psdk/rangefinder_camera_manager.h"
 #include "psdk/release_widget.h"
+#include "hw/auth_chip.h"
 #include "hw/selftest_report.h"
 #include "psdk/telemetry_subscription.h"
 #include "psdk/widget_bridge.h"
@@ -108,6 +109,9 @@ void Usage() {
         "droppoint %s (%s)\n"
         "  droppoint [--config <dir>] [--credentials <file>] [--verbose]\n"
         "  droppoint --selftest [--no-link] [path flags]\n"
+        "  droppoint --check-auth-chip [path flags]  (reset + probe the\n"
+        "                                     certified chip at 0x2A; no\n"
+        "                                     aircraft link needed)\n"
         "  droppoint --probe-widgets <mount position> [path flags]\n"
         "  droppoint --list-kits [--config <dir>]  (with --config, marks the\n"
         "                                         kits that fit that aircraft)\n"
@@ -235,6 +239,7 @@ int main(int argc, char** argv) {
     bool no_link = false;
     bool verbose = false;
     bool list_kits = false;
+    bool check_auth_chip = false;
     int probe_position = -1;
 
     for (int i = 1; i < argc; ++i) {
@@ -253,6 +258,8 @@ int main(int argc, char** argv) {
             verbose = true;
         } else if (arg == "--list-kits") {
             list_kits = true;
+        } else if (arg == "--check-auth-chip") {
+            check_auth_chip = true;
         } else if (arg == "--version") {
             std::printf("droppoint %s (build %s)\n", droppoint::util::kVersionString,
                         droppoint::util::kBuildVersion);
@@ -292,6 +299,40 @@ int main(int argc, char** argv) {
         DP_LOG_INFO("main", std::string("droppoint build ") + droppoint::util::kBuildVersion +
                                 " starting; config dir: " + config_dir);
         const Config cfg = droppoint::util::config::LoadAll(config_dir);
+
+        // ---- --check-auth-chip: reset + probe 0x2A, no aircraft link --------
+        if (check_auth_chip) {
+            const auto& chip = cfg.aircraft.auth_chip;
+            if (!chip.enabled) {
+                std::printf(
+                    "auth_chip is disabled for this aircraft (%s) — no "
+                    "certified chip is expected on this build\n",
+                    cfg.aircraft.model.c_str());
+                return 0;
+            }
+            std::string reset_err;
+            if (!droppoint::hw::PulseAuthChipReset(
+                    chip.reset_gpio_chip, chip.reset_gpio_line,
+                    chip.reset_pulse_ms, &reset_err)) {
+                std::fprintf(stderr,
+                             "warning: certified-chip reset failed: %s "
+                             "(continuing — the chip may have its own reset "
+                             "circuit)\n",
+                             reset_err.c_str());
+            }
+            constexpr std::uint16_t kChipAddress = 0x2A;
+            auto bus = droppoint::hw::MakeAuthChipBus(chip.i2c_device);
+            if (!bus) {
+                std::fprintf(stderr, "auth-chip probe is not supported on this platform\n");
+                return 2;
+            }
+            const droppoint::hw::AuthChipStatus status =
+                droppoint::hw::ProbeAuthChip(*bus, kChipAddress);
+            std::printf("%s\n", droppoint::hw::FormatAuthChipResult(
+                                    status, chip.i2c_device, kChipAddress)
+                                    .c_str());
+            return droppoint::hw::AuthChipExitCode(status);
+        }
 
         // ---- log directory (fall back to ./data/logs, DPK layout) -----------
         std::string log_dir = cfg.system.log_directory;
@@ -442,6 +483,12 @@ int main(int argc, char** argv) {
             si.dem_tile_count = terrain.DemTileCount();
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
+            si.auth_chip_i2c_node_present =
+                cfg.aircraft.auth_chip.enabled &&
+                fs::exists(cfg.aircraft.auth_chip.i2c_device);
+            si.auth_chip_gpio_node_present =
+                cfg.aircraft.auth_chip.enabled &&
+                fs::exists(cfg.aircraft.auth_chip.reset_gpio_chip);
             bool had_fail = false;
             std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::string save_path;
@@ -580,6 +627,12 @@ int main(int argc, char** argv) {
             si.home_tie_alt_m = terrain.HomeTieAltitudeM();
             si.widget_dir = widget_dir;
             si.widget_dir_ok = widget_dir_ok;
+            si.auth_chip_i2c_node_present =
+                cfg.aircraft.auth_chip.enabled &&
+                fs::exists(cfg.aircraft.auth_chip.i2c_device);
+            si.auth_chip_gpio_node_present =
+                cfg.aircraft.auth_chip.enabled &&
+                fs::exists(cfg.aircraft.auth_chip.reset_gpio_chip);
             bool had_fail = false;
             std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::string save_path;

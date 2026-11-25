@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1160" height="640" fill="#ffffff"/>
+  <style>
+    .box { fill: #f4f7fb; stroke: #3d5a80; stroke-width: 2.5; rx: 10; }
+    .air { fill: #e8f0e8; stroke: #2f6b3a; }
+    .title { font-size: 23px; font-weight: bold; fill: #1d3557; }
+    .sub { font-size: 18px; fill: #33415c; }
+    .wire { font-size: 17px; font-style: italic; fill: #33415c; }
+    .port { font-size: 17px; font-weight: bold; fill: #2f6b3a; }
+  </style>
+
+  <!-- ===================== Matrice 400 ===================== -->
+  <rect class="box air" x="430" y="220" width="300" height="160" rx="10"/>
+  <text class="title" x="580" y="268" text-anchor="middle">Matrice 400</text>
+  <text class="sub" x="580" y="296" text-anchor="middle">payload ports</text>
+
+  <!-- ===================== left: drop kit ===================== -->
+  <rect class="box" x="40" y="220" width="270" height="130" rx="10"/>
+  <text class="title" x="175" y="262" text-anchor="middle">Drop kit</text>
+  <text class="sub" x="175" y="290" text-anchor="middle">E-Port V2 kit or SkyPort kit</text>
+  <line x1="310" y1="285" x2="430" y2="285" stroke="#2f6b3a" stroke-width="3.5"/>
+  <polygon points="310,285 326,279 326,291" fill="#2f6b3a"/>
+  <polygon points="430,285 414,279 414,291" fill="#2f6b3a"/>
+  <text class="port" x="370" y="270" text-anchor="middle">payload port</text>
+
+  <!-- ===================== right: Manifold 3 ===================== -->
+  <rect class="box" x="850" y="200" width="280" height="160" rx="10"/>
+  <text class="title" x="990" y="245" text-anchor="middle">Manifold 3</text>
+  <text class="sub" x="990" y="273" text-anchor="middle">DropPoint installed as a</text>
+  <text class="sub" x="990" y="295" text-anchor="middle">.dpk app (Pilot 2 or</text>
+  <text class="sub" x="990" y="317" text-anchor="middle">dji_app_ctl install)</text>
+  <line x1="730" y1="285" x2="850" y2="285" stroke="#c1121f" stroke-width="3.5"/>
+  <polygon points="730,285 746,279 746,291" fill="#c1121f"/>
+  <polygon points="850,285 834,279 834,291" fill="#c1121f"/>
+  <text class="port" x="790" y="270" text-anchor="middle">E-Port V2 E3</text>
+  <text class="wire" x="790" y="310" text-anchor="middle">power + data</text>
+
+  <!-- ===================== bottom: camera ===================== -->
+  <rect class="box" x="445" y="500" width="270" height="100" rx="10"/>
+  <text class="title" x="580" y="540" text-anchor="middle">Zenmuse H30T</text>
+  <text class="sub" x="580" y="568" text-anchor="middle">gimbal camera</text>
+  <line x1="580" y1="380" x2="580" y2="500" stroke="#555" stroke-width="3.5"/>
+  <polygon points="580,380 573,396 587,396" fill="#555"/>
+  <polygon points="580,500 573,484 587,484" fill="#555"/>
+  <text class="port" x="615" y="445">gimbal port</text>
+
+  <!-- ===================== top: PC via debug USB-C ===================== -->
+  <rect class="box" x="445" y="40" width="270" height="110" rx="10"/>
+  <text class="title" x="580" y="80" text-anchor="middle">PC (setup only)</text>
+  <text class="sub" x="580" y="107" text-anchor="middle">SSH to 192.168.42.140</text>
+  <text class="sub" x="580" y="129" text-anchor="middle">install + debug the .dpk</text>
+  <line x1="580" y1="150" x2="580" y2="220" stroke="#1d6fd1" stroke-width="3.5"/>
+  <polygon points="580,150 573,166 587,166" fill="#1d6fd1"/>
+  <polygon points="580,220 573,204 587,204" fill="#1d6fd1"/>
+  <text class="port" x="615" y="190" fill="#1d6fd1">USB-C debug port</text>
+
+  <!-- caption note -->
+  <text class="wire" x="40" y="470">Every device gets its own aircraft port —</text>
+  <text class="wire" x="40" y="492">the Manifold 3 carries the certified chip</text>
+  <text class="wire" x="40" y="514">inside DJI's cable path; nothing else</text>
+  <text class="wire" x="40" y="536">needs wiring.</text>
+</svg>

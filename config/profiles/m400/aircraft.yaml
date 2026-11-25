@@ -56,6 +56,12 @@ baud_rate: 921600
 # No PPS line is wired on this build.
 pps_available: false
 
+# No external certified chip: on the M400 it is inside DJI's E-Port V2
+# coaxial cable (and inside the Manifold 3 path), so nothing is wired or
+# reset by the companion computer.
+auth_chip:
+  enabled: false
+
 # The release hardware is a CZI TH4 V3 drop kit on SkyPort, operated by the
 # pilot in DJI Pilot 2. DropPoint cannot actuate it — it computes and
 # announces the release instant, and the floating window says "PRESS

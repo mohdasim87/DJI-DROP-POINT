@@ -18,13 +18,15 @@ extern "C" {
 #include "hal_usb_bulk.h"
 }
 
+#include "hal_i2c.h"
 #include "hal_uart.h"
 
 namespace droppoint::psdk {
 
-// Defined in hal_uart.cpp (the anonymous namespace there keeps the C
-// callbacks private).
+// Defined in hal_uart.cpp / hal_i2c.cpp (the anonymous namespaces there keep
+// the C callbacks private).
 void FillUartHandler(T_DjiHalUartHandler* handler);
+void FillI2cHandler(T_DjiHalI2cHandler* handler);
 
 namespace {
 
@@ -94,6 +96,20 @@ void RegisterPlatformHandlers(const util::config::AircraftConfig& aircraft) {
     sock.TcpSendData = Osal_TcpSendData;
     sock.TcpRecvData = Osal_TcpRecvData;
     Check(DjiPlatform_RegSocketHandler(&sock), "DjiPlatform_RegSocketHandler");
+
+    // The SDK Certified Chip on the Matrice 4 series must be registered
+    // before the transport handler and DjiCore_Init — the SDK authenticates
+    // over this bus by itself during init (docs/SETUP-MANUAL.md 5.3).
+    if (aircraft.auth_chip.enabled) {
+        ConfigureI2cHal(aircraft.auth_chip.i2c_device,
+                        aircraft.auth_chip.reset_gpio_chip,
+                        aircraft.auth_chip.reset_gpio_line,
+                        aircraft.auth_chip.reset_pulse_ms);
+        T_DjiHalI2cHandler i2c{};
+        FillI2cHandler(&i2c);
+        Check(DjiPlatform_RegHalI2cHandler(&i2c),
+              "DjiPlatform_RegHalI2cHandler");
+    }
 
     // Transport: exactly one link per build config.
     switch (aircraft.psdk_link_mode) {

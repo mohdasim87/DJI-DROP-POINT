@@ -177,3 +177,26 @@ TEST_CASE("Config: empty release.description is filled from the kit") {
     REQUIRE(cfg.aircraft.release.description.find("CZI") != std::string::npos);
     REQUIRE(cfg.aircraft.release.description.find("TH2") != std::string::npos);
 }
+
+TEST_CASE("Config: shipped profiles carry the expected auth_chip setting") {
+    const auto m4t = util::config::LoadAll(ConfigRoot() + "/profiles/m4t");
+    REQUIRE(m4t.aircraft.auth_chip.enabled);
+    REQUIRE(m4t.aircraft.auth_chip.i2c_device == "/dev/i2c-1");
+    REQUIRE(m4t.aircraft.auth_chip.reset_gpio_line == 4);
+    const auto m400 = util::config::LoadAll(ConfigRoot() + "/profiles/m400");
+    REQUIRE(!m400.aircraft.auth_chip.enabled);
+}
+
+TEST_CASE("Config: auth_chip enabled on manifold3 is rejected") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m400", "m400chip",
+                                   "aircraft.yaml", "enabled: false", "enabled: true");
+    REQUIRE(LoadFailsWith(dir, "auth_chip"));
+    REQUIRE(LoadFailsWith(dir, "anifold"));
+}
+
+TEST_CASE("Config: auth_chip enabled with an empty i2c_device is rejected") {
+    const auto dir = MutateProfile(ConfigRoot() + "/profiles/m4t", "emptyi2c",
+                                   "aircraft.yaml", "i2c_device: \"/dev/i2c-1\"",
+                                   "i2c_device: \"\"");
+    REQUIRE(LoadFailsWith(dir, "i2c_device"));
+}

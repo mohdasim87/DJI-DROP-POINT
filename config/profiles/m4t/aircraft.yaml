@@ -59,6 +59,17 @@ baud_rate: 921600
 # No PPS line is wired on this build.
 pps_available: false
 
+# The Matrice 4 series refuses a third-party payload without a DJI SDK
+# Certified Chip on the payload side (docs/SETUP-MANUAL.md 5.3): an I2C
+# device at 0x2A whose NRST line is pulsed at start-up. reset_gpio_line is
+# the chip-select GPIO wired to NRST (BCM 4 = header pin 7).
+auth_chip:
+  enabled: true
+  i2c_device: "/dev/i2c-1"
+  reset_gpio_chip: "/dev/gpiochip0"
+  reset_gpio_line: 4
+  reset_pulse_ms: 25
+
 # The release hardware is a CZI TH2 drop kit: triggered by the aircraft
 # auxiliary bottom light, operated by the pilot in DJI Pilot 2. DropPoint
 # cannot actuate it — it computes and announces the release instant, and
