@@ -16,8 +16,8 @@
   <!-- ===================== Matrice 400 ===================== -->
   <rect class="box air" x="30" y="90" width="210" height="160" rx="10"/>
   <text class="title" x="135" y="130" text-anchor="middle">Matrice 400</text>
-  <rect x="180" y="150" width="60" height="40" rx="6" fill="#ffffff" stroke="#2f6b3a" stroke-width="2"/>
-  <text class="sub" x="210" y="175" text-anchor="middle">E-Port V2</text>
+  <rect x="148" y="150" width="92" height="40" rx="6" fill="#ffffff" stroke="#2f6b3a" stroke-width="2"/>
+  <text class="sub" x="194" y="175" text-anchor="middle">E-Port V2</text>
   <text class="sub" x="135" y="225" text-anchor="middle">(powered off)</text>
 
   <!-- coaxial cable with the certified chip inside -->
@@ -47,12 +47,12 @@
   <text class="title" x="765" y="175" text-anchor="middle">USB-to-TTL</text>
   <text class="sub" x="765" y="197" text-anchor="middle">FT232 / CP2102</text>
   <text class="sub" x="765" y="216" text-anchor="middle">3.3 V</text>
-  <text class="port" x="844" y="240" text-anchor="end">TXD</text>
-  <text class="port" x="844" y="264" text-anchor="end">RXD</text>
-  <text class="port" x="844" y="286" text-anchor="end">GND</text>
-  <circle cx="850" cy="235" r="5" fill="#1d6fd1"/>
-  <circle cx="850" cy="259" r="5" fill="#0f9d8f"/>
-  <circle cx="850" cy="281" r="5" fill="#222222"/>
+  <text class="port" x="828" y="240" text-anchor="end">TXD</text>
+  <text class="port" x="828" y="264" text-anchor="end">RXD</text>
+  <text class="port" x="828" y="286" text-anchor="end">GND</text>
+  <circle cx="842" cy="235" r="5" fill="#1d6fd1"/>
+  <circle cx="842" cy="259" r="5" fill="#0f9d8f"/>
+  <circle cx="842" cy="281" r="5" fill="#222222"/>
 
   <!-- ===================== Raspberry Pi ===================== -->
   <rect class="box pi" x="860" y="60" width="290" height="480" rx="10"/>
@@ -60,25 +60,25 @@
   <text class="sub" x="1005" y="117" text-anchor="middle">header pins used</text>
 
   <!-- pin 2 -->
-  <rect x="885" y="140" width="240" height="36" rx="6" fill="#ffe9e9" stroke="#c1121f" stroke-width="2"/>
-  <circle cx="901" cy="158" r="5" fill="#c1121f"/>
-  <text class="pin" x="913" y="163">2</text>
-  <text class="pinname" x="935" y="163">5 V — board XT30</text>
+  <rect x="875" y="140" width="265" height="36" rx="6" fill="#ffe9e9" stroke="#c1121f" stroke-width="2"/>
+  <circle cx="891" cy="158" r="5" fill="#c1121f"/>
+  <text class="pin" x="903" y="163">2</text>
+  <text class="pinname" x="925" y="163">5 V — board XT30</text>
   <!-- pin 6 -->
-  <rect x="885" y="192" width="240" height="36" rx="6" fill="#eeeeee" stroke="#222222" stroke-width="2"/>
-  <circle cx="901" cy="210" r="5" fill="#222222"/>
-  <text class="pin" x="913" y="215">6</text>
-  <text class="pinname" x="935" y="215">GND — XT30 + TTL</text>
+  <rect x="875" y="192" width="265" height="36" rx="6" fill="#eeeeee" stroke="#222222" stroke-width="2"/>
+  <circle cx="891" cy="210" r="5" fill="#222222"/>
+  <text class="pin" x="903" y="215">6</text>
+  <text class="pinname" x="925" y="215">GND — XT30 + TTL</text>
   <!-- pin 8 -->
-  <rect x="885" y="244" width="240" height="36" rx="6" fill="#ddf3f1" stroke="#0f9d8f" stroke-width="2"/>
-  <circle cx="901" cy="262" r="5" fill="#0f9d8f"/>
-  <text class="pin" x="913" y="267">8</text>
-  <text class="pinname" x="935" y="267">GPIO14 (TXD) — TTL RXD</text>
+  <rect x="875" y="244" width="265" height="36" rx="6" fill="#ddf3f1" stroke="#0f9d8f" stroke-width="2"/>
+  <circle cx="891" cy="262" r="5" fill="#0f9d8f"/>
+  <text class="pin" x="903" y="267">8</text>
+  <text class="pinname" x="925" y="267">GPIO14 (TXD) — TTL RXD</text>
   <!-- pin 10 -->
-  <rect x="885" y="296" width="240" height="36" rx="6" fill="#e0ecfb" stroke="#1d6fd1" stroke-width="2"/>
-  <circle cx="901" cy="314" r="5" fill="#1d6fd1"/>
-  <text class="pin" x="913" y="319">10</text>
-  <text class="pinname" x="941" y="319">GPIO15 (RXD) — TTL TXD</text>
+  <rect x="875" y="296" width="265" height="36" rx="6" fill="#e0ecfb" stroke="#1d6fd1" stroke-width="2"/>
+  <circle cx="891" cy="314" r="5" fill="#1d6fd1"/>
+  <text class="pin" x="903" y="319">10</text>
+  <text class="pinname" x="933" y="319">GPIO15 (RXD) — TTL TXD</text>
 
   <text class="sub" x="1005" y="380" text-anchor="middle">TX and RX cross over;</text>
   <text class="sub" x="1005" y="402" text-anchor="middle">pin 6 carries both grounds</text>
@@ -86,18 +86,20 @@
   <text class="sub" x="1005" y="472" text-anchor="middle">it is inside the cable</text>
 
   <!-- wires TTL -> pi -->
-  <path d="M 850 235 C 830 235, 830 314, 885 314" fill="none" stroke="#1d6fd1" stroke-width="3.5"/>
-  <path d="M 850 259 C 835 259, 835 262, 885 262" fill="none" stroke="#0f9d8f" stroke-width="3.5"/>
-  <path d="M 850 281 C 820 281, 830 210, 885 210" fill="none" stroke="#222222" stroke-width="3.5"/>
+  <path d="M 847 235 C 840 235, 835 314, 875 314" fill="none" stroke="#1d6fd1" stroke-width="3.5"/>
+  <path d="M 847 259 C 845 259, 845 262, 875 262" fill="none" stroke="#0f9d8f" stroke-width="3.5"/>
+  <path d="M 847 281 C 840 281, 835 210, 875 210" fill="none" stroke="#222222" stroke-width="3.5"/>
 
-  <!-- wires XT30 5V -> pins 2 and 6 -->
-  <path d="M 445 275 C 505 340, 700 420, 760 420 C 830 420, 820 158, 885 158"
+  <!-- wires XT30 5V + GND -> pins 2 and 6, routed along the bottom -->
+  <path d="M 505 275 C 505 420, 540 505, 700 505 C 820 505, 856 505, 856 400 C 856 200, 870 158, 875 158"
         fill="none" stroke="#c1121f" stroke-width="3.5"/>
-  <path d="M 445 275 C 505 350, 690 440, 755 440 C 825 440, 820 210, 885 210"
+  <path d="M 505 275 C 505 440, 535 545, 690 545 C 800 545, 846 545, 846 420 C 846 250, 865 210, 875 210"
         fill="none" stroke="#222222" stroke-width="3.5"/>
+  <text class="port" x="700" y="497" fill="#c1121f">5 V</text>
+  <text class="port" x="700" y="560" fill="#222222">GND</text>
 
   <!-- legend -->
-  <rect x="30" y="470" width="480" height="140" rx="8" fill="#f7f7f7" stroke="#999" stroke-width="1"/>
+  <rect x="30" y="470" width="450" height="140" rx="8" fill="#f7f7f7" stroke="#999" stroke-width="1"/>
   <text class="title" x="50" y="498" font-size="16">Wire colours</text>
   <line x1="50" y1="520" x2="90" y2="520" stroke="#c1121f" stroke-width="4"/><text class="lg" x="100" y="525">5 V (XT30)</text>
   <line x1="50" y1="545" x2="90" y2="545" stroke="#222222" stroke-width="4"/><text class="lg" x="100" y="550">GND</text>

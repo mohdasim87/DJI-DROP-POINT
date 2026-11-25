@@ -33,7 +33,8 @@ import pymupdf
 from pdf_common import (REPO, read, run, term_image, require_fresh, find_edge,
                         run_edge, widget_table, make_widget_illustration,
                         hud_strings, make_hud_image, install_log_parts,
-                        CSS, paginate_js, blk, img, draft_img, TOP_ELEM_RE)
+                        CSS, paginate_js, blk, img, draft_img, TOP_ELEM_RE,
+                        check_ol_numbering)
 
 MANUAL_MD = REPO / "docs/SETUP-MANUAL.md"
 DIAGRAMS = REPO / "docs" / "diagrams"
@@ -59,7 +60,9 @@ def manual_blocks(md_text: str, media_for) -> list:
     if leftover:
         sys.exit(f"error: unresolved placeholders in SETUP-MANUAL.md: {leftover}")
 
-    h = markdown.markdown(processed, extensions=["tables", "fenced_code"])
+    h = markdown.markdown(processed,
+                          extensions=["tables", "fenced_code", "sane_lists"])
+    check_ol_numbering(processed, h, "SETUP-MANUAL.md")
     for key, (kind, name, cap) in sentinels.items():
         marker = f"<p>{key}</p>"
         if marker not in h:
@@ -90,24 +93,41 @@ def heading_entries(elems: list) -> list:
     return out
 
 
+HEADING_COLOR = 0x0A3069  # h2/h3 colour in the CSS
+
+
+def _page_heading_text(page) -> str:
+    """Text of lines containing a heading-coloured span. Body text and
+    table headers stay black, so heading titles that also appear verbatim
+    inside a table (the build names in 'Choose your build') do not fake a
+    TOC hit on the wrong page."""
+    out = []
+    for b in page.get_text("dict")["blocks"]:
+        for l in b.get("lines", []):
+            if any(s["color"] == HEADING_COLOR for s in l["spans"]):
+                out.append("".join(s["text"] for s in l["spans"]))
+    return " ".join(out)
+
+
 def find_heading_pages(pdf_path: Path, titles: list, skip_pages: int) -> list:
     """For each title, the first page index >= skip_pages containing it."""
     doc = pymupdf.open(str(pdf_path))
     pages = list(range(skip_pages, doc.page_count))
+    heading_text = {p: _page_heading_text(doc[p]) for p in pages}
+    doc.close()
     found = []
     for t in titles:
         needle = t
         hit = None
         while needle and hit is None:
             for p in pages:
-                if doc[p].search_for(needle):
+                if needle in heading_text[p]:
                     hit = p
                     break
             needle = needle[:-1]  # em-dashes/hyphens may reflow
         if hit is None:
             sys.exit(f"error: heading '{t}' not found in the generated PDF")
         found.append(hit)
-    doc.close()
     return found
 
 

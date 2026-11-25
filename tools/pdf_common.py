@@ -56,11 +56,20 @@ def run(cmd, cwd=None, check=True) -> str:
     return proc.stdout + proc.stderr
 
 
-def term_image(title: str, text: str, out: Path, max_rows: int = 40):
-    """Render verbatim terminal output as a dark terminal-style PNG."""
-    lines = text.replace("\r", "").split("\n")
-    while lines and not lines[-1].strip():
-        lines.pop()
+def term_image(title: str, text: str, out: Path, max_rows: int = 40,
+               max_cols: int = 110):
+    """Render verbatim terminal output as a dark terminal-style PNG.
+    Lines wider than max_cols are hard-wrapped with a visible '…'
+    continuation marker instead of shrinking the font below legibility."""
+    raw = text.replace("\r", "").split("\n")
+    while raw and not raw[-1].strip():
+        raw.pop()
+    lines = []
+    for ln in raw:
+        while len(ln) > max_cols:
+            lines.append(ln[:max_cols - 1] + "…")
+            ln = "… " + ln[max_cols - 1:]
+        lines.append(ln)
     if len(lines) > max_rows:
         keep_head = max_rows - 9
         omitted = len(lines) - keep_head - 8
@@ -340,7 +349,10 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 3mm;
         font-size: 9.2pt; }
 th, td { border: 1px solid #c8cdd4; padding: 1.6mm 2.4mm; text-align: left;
          overflow-wrap: anywhere; }
-th { background: #eef2f7; }
+/* header cells may wrap at spaces but never mid-word ("Qty" must not
+   become "Qt/y"): break-word keeps the column's min-content at the
+   longest word instead of collapsing to one char like anywhere does */
+th { background: #eef2f7; overflow-wrap: break-word; }
 /* the drop-kit tables are 9 columns — fixed layout + small font keeps
    every column inside A4 portrait */
 table.kits { table-layout: fixed; font-size: 7.4pt; }
@@ -422,10 +434,22 @@ window.addEventListener('load', function () {
     cur.appendChild(b);
     var bh = b.offsetHeight;
     if (had && used + bh > limit) {
-      cur.removeChild(b);
-      newPage();
-      cur.appendChild(b);
-      used = shrink(b);
+      // a small trailing block is pulled onto this page (scaled) instead of
+      // being stranded alone on the next one — images may squeeze a bit more
+      var avail = limit - used;
+      var minS = b.querySelector('img') ? 0.5 : 0.65;
+      if (bh <= avail / minS) {
+        var s = avail / bh;
+        b.style.transformOrigin = 'top left';
+        b.style.transform = 'scale(' + s + ')';
+        b.style.width = (100 / s) + '%';
+        used = limit;
+      } else {
+        cur.removeChild(b);
+        newPage();
+        cur.appendChild(b);
+        used = shrink(b);
+      }
     } else if (!had && bh > limit) {
       used = shrink(b);
     } else {
@@ -462,12 +486,40 @@ TOP_ELEM_RE = re.compile(
     r'|<hr[^>]*/?>|<img[^>]*>', re.S)
 
 
+def check_ol_numbering(md_text: str, html_text: str, label: str):
+    """Every number written in the markdown must be the number the HTML
+    renders (python-markdown's sane_lists emits <ol start=N> for lists whose
+    first item is not 1). Compared as flat sequences — a nested list keeps
+    its own numbering, matching its position in the written sequence."""
+    body = re.sub(r"^```.*?^```", "", md_text, flags=re.S | re.M)
+    written = [int(n) for n in re.findall(r"^[ ]{0,3}(\d+)[.)]\s", body, re.M)]
+    shown, stack = [], []
+    for m in re.finditer(r"<(/?)(ol|ul|li)\b[^>]*>", html_text):
+        closing, tag, whole = m.group(1), m.group(2), m.group(0)
+        if tag in ("ol", "ul"):
+            if closing:
+                if stack:
+                    stack.pop()
+            else:
+                s = re.search(r'start="(\d+)"', whole)
+                stack.append((tag, int(s.group(1)) if s else 1))
+        elif tag == "li" and not closing and stack and stack[-1][0] == "ol":
+            _, n = stack[-1]
+            shown.append(n)
+            stack[-1] = ("ol", n + 1)
+    if shown != written:
+        sys.exit(f"error: ordered-list numbering in {label} does not match "
+                 f"the markdown source\n  written: {written}\n  shown:    {shown}")
+
+
 def md_blocks(rel: str) -> list:
     """Render a markdown file to HTML split into top-level block elements.
     Each heading is merged with the element that follows it so a heading can
     never be orphaned at the bottom of a page."""
-    h = markdown.markdown(read(REPO / rel),
-                          extensions=["tables", "fenced_code"])
+    md_text = read(REPO / rel)
+    h = markdown.markdown(md_text,
+                          extensions=["tables", "fenced_code", "sane_lists"])
+    check_ol_numbering(md_text, h, rel)
     elems = [m.group(0) for m in TOP_ELEM_RE.finditer(h)]
     if re.sub(r"\s", "", "".join(elems)) != re.sub(r"\s", "", h):
         sys.exit(f"error: markdown block split lost content in {rel}")

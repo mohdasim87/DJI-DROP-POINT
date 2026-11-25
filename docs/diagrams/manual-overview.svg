@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 560" font-family="Arial, Helvetica, sans-serif">
-  <rect width="1160" height="560" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 610" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1160" height="610" fill="#ffffff"/>
   <style>
     .box { fill: #f4f7fb; stroke: #3d5a80; stroke-width: 2.5; rx: 10; }
     .boxair { fill: #e8f0e8; stroke: #2f6b3a; }
     .title { font-size: 24px; font-weight: bold; fill: #1d3557; }
     .sub { font-size: 18px; fill: #33415c; }
-    .wire { font-size: 18px; fill: #33415c; font-style: italic; }
+    .wire { font-size: 18px; fill: #33415c; font-style: italic;
+            paint-order: stroke; stroke: #ffffff; stroke-width: 5px;
+            stroke-linejoin: round; }
     .note { font-size: 19px; fill: #8d0801; font-weight: bold; }
   </style>
 
@@ -19,7 +21,7 @@
   <polygon points="270,270 284,264 284,276" fill="#7a7a7a"/>
   <polygon points="430,270 416,264 416,276" fill="#7a7a7a"/>
   <text class="wire" x="350" y="252" text-anchor="middle">radio link</text>
-  <text class="wire" x="350" y="300" text-anchor="middle">(no wires)</text>
+  <text class="wire" x="350" y="304" text-anchor="middle">(no wires)</text>
 
   <!-- Aircraft -->
   <rect class="box boxair" x="430" y="200" width="300" height="140" rx="10"/>
@@ -30,19 +32,19 @@
   <!-- Aircraft -> companion computer -->
   <line x1="730" y1="225" x2="900" y2="150" stroke="#c1121f" stroke-width="3.5"/>
   <polygon points="900,150 883,150 892,163" fill="#c1121f"/>
-  <text class="wire" x="830" y="172" text-anchor="middle">payload port</text>
-  <text class="wire" x="830" y="192" text-anchor="middle">(data + power)</text>
+  <text class="wire" x="815" y="120" text-anchor="middle">payload port</text>
+  <text class="wire" x="815" y="142" text-anchor="middle">(data + power)</text>
 
   <!-- Companion computer -->
-  <rect class="box" x="900" y="90" width="230" height="110" rx="10"/>
-  <text class="title" x="1015" y="130" text-anchor="middle">Companion computer</text>
-  <text class="sub" x="1015" y="157" text-anchor="middle">runs DropPoint</text>
-  <text class="sub" x="1015" y="180" text-anchor="middle">(Raspberry Pi / Manifold 3)</text>
+  <rect class="box" x="880" y="80" width="270" height="120" rx="10"/>
+  <text class="title" x="1015" y="118" text-anchor="middle" font-size="22">Companion computer</text>
+  <text class="sub" x="1015" y="150" text-anchor="middle">runs DropPoint</text>
+  <text class="sub" x="1015" y="176" text-anchor="middle">(Raspberry Pi / Manifold 3)</text>
 
   <!-- Aircraft -> drop kit -->
   <line x1="730" y1="315" x2="900" y2="390" stroke="#2f6b3a" stroke-width="3.5"/>
   <polygon points="900,390 892,377 883,390" fill="#2f6b3a"/>
-  <text class="wire" x="830" y="368" text-anchor="middle">aircraft port</text>
+  <text class="wire" x="820" y="345" text-anchor="middle">aircraft port</text>
 
   <!-- Drop kit -->
   <rect class="box" x="900" y="345" width="230" height="110" rx="10"/>
@@ -61,6 +63,6 @@
   <text class="note" x="240" y="425" text-anchor="middle">Nothing plugs into the remote</text>
   <text class="note" x="240" y="447" text-anchor="middle">controller.</text>
 
-  <text class="wire" x="580" y="540" text-anchor="middle">DropPoint computes the release point on the companion computer;</text>
-  <text class="wire" x="580" y="558" text-anchor="middle" dy="-2">the drop kit does the mechanical release.</text>
+  <text class="wire" x="520" y="580" text-anchor="middle">DropPoint computes the release point on the companion computer;</text>
+  <text class="wire" x="520" y="602" text-anchor="middle">the drop kit does the mechanical release.</text>
 </svg>
