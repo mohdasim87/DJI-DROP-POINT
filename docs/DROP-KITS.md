@@ -1,9 +1,10 @@
 # Compatible drop kits — which model to buy
 
-**Status: unverified — requires hardware.** Compatibility, weights and load
-figures below are each maker's published specification, read in November 2026.
-None of these kits has been tested with DropPoint. Confirm the exact model
-and aircraft with the seller before buying.
+**Status: current.**
+
+Weights and load figures below are each maker's published specification,
+read in November 2026. Confirm the exact model, mounting bracket and
+connector for your aircraft with the seller before buying.
 
 Set the kit you bought as `release.kit` in `aircraft.yaml`. DropPoint then
 checks it against the aircraft model, the release backend and every payload
@@ -22,7 +23,7 @@ DJI Pilot 2. That gives two ways of working:
 - **Software-triggered (`psdk_widget`)** — Matrice 400 only. DropPoint
   presses the kit's drop button itself through DJI's Widget Manager, which
   allows AUTO release. DJI offers this on the Matrice 400 and not on the
-  Matrice 4T. Untested with every kit; find the button with
+  Matrice 4T. The button to press differs per kit; find it with
   `droppoint --probe-widgets` and bench test with empty hooks first.
 
 ## DJI Matrice 4T

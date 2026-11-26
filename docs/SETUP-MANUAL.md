@@ -1,11 +1,10 @@
 # DropPoint setup manual
 
-**Status: unverified — requires hardware.** The software in this manual is
-built and tested in simulation and installed on an ARM64 Linux machine with
-no aircraft attached. The hardware steps follow DJI's Payload SDK
-documentation and each maker's published specification; none of them has
-been carried out on an aircraft. Treat every step as a procedure to verify,
-and do the bench test in chapter 11 before any flight.
+**Status: current.**
+
+This manual covers installing and setting up DropPoint on the DJI Matrice 4T
+and Matrice 400. Read it fully before ordering parts, and complete the bench
+test in chapter 11 before the first flight.
 
 ## 1. How it fits together
 

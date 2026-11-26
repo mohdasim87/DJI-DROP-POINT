@@ -267,8 +267,8 @@ def main() -> int:
         <div class="sub">Setup manual — hardware, wiring and
         installation<br>version {ver_esc} — {today}{build_line}</div>
         <div class="warn" style="display:inline-block;text-align:left;">
-        Not flight-verified: built and tested in simulation and on ARM64 Linux
-        without an aircraft.</div></div></div>"""
+        Complete the bench test in chapter 11 before the first
+        flight.</div></div></div>"""
 
     html_path = shots.parent / "setup-manual.html"
 

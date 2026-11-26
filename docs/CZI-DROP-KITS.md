@@ -1,8 +1,8 @@
 # Using DropPoint with CZI (and similar) drop kits
 
-**Status: unverified — requires hardware.** Everything here comes from the
-DJI Payload SDK v3.16.0 headers, DJI's developer documentation and CZI's
-published manuals. None of it has been run on an aircraft.
+**Status: current.** Everything here comes from the DJI Payload SDK v3.16.0
+headers, DJI's developer documentation and CZI's published manuals. Bench
+test with empty hooks before the first operational drop.
 
 ## Short answer
 

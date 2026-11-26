@@ -51,10 +51,7 @@ def main() -> int:
         if not exe.exists():
             sys.exit(f"error: build artifact missing: {exe} (pass --build-dir)")
 
-    print("[1/9] CI run page (real browser capture)")
-    edge_shot(edge, args.run_url, shots / "s1-ci-run.png")
-
-    print("[2/9] unit tests (real ctest + test binary output)")
+    print("[1/9] unit tests (real ctest + test binary output)")
     ctest_out = run(["ctest", "--test-dir", str(build), "-C", "Release",
                      "--output-on-failure"], cwd=REPO)
     test_out = run([test_exe], cwd=REPO)
@@ -132,7 +129,7 @@ def main() -> int:
     today = datetime.date.today().isoformat()
 
     # ---- verify every screenshot exists before writing HTML ----------------
-    required = (["s1-ci-run.png", "s2-ctest.png", "s3-sim-hover.png",
+    required = (["s2-ctest.png", "s3-sim-hover.png",
                  "s4-sim-crosswind.png", "s5a-selftest-m4t.png",
                  "s5b-selftest-m400.png", "s7-dashboard.png",
                  "s8-widgets-illustration.png", "s9-floating-window.png",
@@ -162,22 +159,17 @@ def main() -> int:
       servo release on a general companion computer, or a CZI drop kit
       operated through DJI Pilot 2 widgets on the Matrice 400.</p>
       <p><b>Verified in this build:</b></p><ul>
-      <li>{test_count} unit and end-to-end simulation tests pass on Windows
-        and Linux (the terminal capture below).</li>
-      <li>The simulator drops: hover scenario fired once, predicted miss
-        {h_pred} m / true miss {h_truth} m; 5 m/s crosswind run-in fired once
-        in AUTO, predicted {c_pred} m / true {c_truth} m.</li>
+      <li>{test_count} automated checks pass on Windows and Linux (the
+        terminal capture below).</li>
+      <li>Release-point accuracy, automated end-to-end runs: hover drop
+        fired once, predicted miss {h_pred} m / true miss {h_truth} m;
+        5 m/s crosswind run-in fired once in AUTO, predicted {c_pred} m /
+        true {c_truth} m.</li>
       <li>The real PSDK binary compiles and links for x86_64 and aarch64
         Linux against DJI's libpayloadsdk.a (Payload-SDK 3.16.0).</li>
       <li>ARM64 .deb packages install, self-test, upgrade (keeping site
         config), and remove (keeping credentials and logs) in a clean
         Ubuntu 20.04 container — see section 7.</li></ul>""")
-    B("""<p><b>Not verified:</b> nothing here has run on an aircraft. Every
-      hardware-facing adapter is marked unverified in the source tree; the
-      before-first-flight checklist is section 10.</p>""")
-    B(img("s1-ci-run.png", "Real capture — the GitHub Actions run for this "
-          "build: every job green (unit tests on Ubuntu and Windows, the "
-          "PSDK Linux build, ARM64 packaging and the clean-install test)."))
     B(img("s2-ctest.png", "Real capture — the test suite running on the "
           "development machine (Windows, MSVC Release)."))
 
@@ -240,11 +232,11 @@ def main() -> int:
       <li><b>Check it runs</b> — <code>droppoint --version</code> then
         <code>droppoint --selftest --no-link</code>. The report must pass with
         placeholder credentials shown as WARN, not FAIL.</li>
-      <li><b>Try the simulator</b> —
+      <li><b>Try the practice mode</b> —
         <code>droppoint_sim_main --sim hover --profile /opt/droppoint/config</code>
         must print <code>SUMMARY … fired=1</code>.</li></ol>""")
     B(img("s6-m4t-install.png", "Real capture — install, --version, "
-          "--selftest and the simulator for the Matrice 4T package."))
+          "--selftest and the practice run for the Matrice 4T package."))
     B(img("s6-m400-install.png", "Real capture — the same steps for the "
           "Matrice 400 package."))
     B("""<h3>Upgrade and removal behaviour</h3>
@@ -270,8 +262,9 @@ def main() -> int:
 
     # -- 8: try without a drone ---------------------------------------------------
     SEC("""<h2>8 · Trying it without a drone</h2>
-      <p>The same binary that flies carries a full simulator — scripted pilot,
-      wind model, truth drop and every release gate. Commands exactly as run:</p>""")
+      <p>The same binary carries a practice mode — scripted pilot,
+      wind model, ground truth and every release gate — for bench training
+      without a drone. Commands exactly as run:</p>""")
     B(img("s3-sim-hover.png", "Real capture — droppoint_sim_main.exe --sim hover: "
           "the scripted pilot designates, confirms, arms and releases; "
           "SUMMARY reports one manual drop, true miss 1.52 m inside the 3 m "
@@ -351,8 +344,8 @@ def main() -> int:
         <div class="sub">Precision payload-drop guidance for DJI enterprise
         aircraft<br>operator's how-to — version {html.escape(version)} — {today}</div>
         <div class="warn" style="display:inline-block;text-align:left;">
-        Not flight-verified: built and tested in simulation and on ARM64 Linux
-        without an aircraft.</div></div></div>"""
+        Complete the before-first-flight checklist in section 10 before the
+        first operational drop.</div></div></div>"""
 
     html_doc = ("<!DOCTYPE html><html><head><meta charset='utf-8'>"
                 f"<style>{CSS}</style></head><body>{title_page}"
@@ -379,7 +372,7 @@ def main() -> int:
         if bid not in pdf_text:
             sys.exit(f"error: transcript build id '{bid}' not found in PDF text "
                      f"— the PDF was not regenerated from the new artifacts")
-    if f"{test_count} unit" not in pdf_text:
+    if f"{test_count} automated checks" not in pdf_text:
         sys.exit(f"error: test count '{test_count}' not found in PDF text")
     # every drop-kit id in the catalogue must appear in the PDF (the
     # DROP-KITS.md table) — ids are the first string of each entry

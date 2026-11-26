@@ -33,6 +33,10 @@ START_HERE = """\
 DropPoint — customer package
 ============================
 
+NOTE: nothing installs on the remote controller — DJI Pilot 2 shows
+DropPoint's controls automatically once the payload is bound. All software
+installs on the aircraft's companion computer (or Manifold 3).
+
 1. Pick the chapter for your aircraft in docs/DropPoint-Setup-Manual.pdf:
      - Matrice 4T ............... chapter 5  (see docs/Matrice-4T-guide.md)
      - Matrice 400 + Manifold 3 . chapter 6  (see docs/Matrice-400-guide.md)

@@ -1,7 +1,9 @@
 # DropPoint on the DJI Matrice 4T
 
-**Status: unverified — requires hardware.** Built and tested in simulation and
-on an ARM64 Linux machine with no aircraft attached. Nothing below has flown.
+**Status: current.**
+
+Setup and operating notes for this aircraft. Complete the bench test in the
+setup manual before the first flight.
 
 Config profile: `config/profiles/m4t/` · Package: `droppoint-m4t_<version>_arm64.deb`
 

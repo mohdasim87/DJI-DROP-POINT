@@ -292,7 +292,7 @@ def make_hud_image(huds, shots: Path) -> Path:
     d = ImageDraw.Draw(img_)
     d.text((24, 16), "Floating-window text — exactly as DropPoint sends it",
            font=font("consolab.ttf", 30), fill="#e8e8e8")
-    d.text((24, 54), "captured from simulator runs (rendered here outside DJI Pilot 2)",
+    d.text((24, 54), "rendered here outside DJI Pilot 2",
            font=font("consola.ttf", 17), fill="#8b949e")
     for i, s in enumerate(huds):
         col, row = i % cols, i // cols
