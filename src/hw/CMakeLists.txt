@@ -12,6 +12,8 @@ add_library(droppoint_hw STATIC
     selftest_report.cpp
     file_ownership.cpp
     auth_chip.cpp
+    device_id.cpp
+    license_state.cpp
 )
 target_include_directories(droppoint_hw PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

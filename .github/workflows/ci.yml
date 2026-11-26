@@ -153,6 +153,9 @@ jobs:
           for profile in m4t m400; do
             bash scripts/package.sh "$profile" "$VERSION" build dist
           done
+          # vendor license tool: NOT shipped in any package — mounted into the
+          # install test only, to mint a license for the container's device code
+          cp "$(find build -name droppoint-license -type f | head -1)" dist/
 
       - name: Package m400 .dpk (packaging check only — dummy credentials)
         shell: bash
@@ -195,7 +198,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: droppoint-packages
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/droppoint-license
 
   install-test-arm64:
     needs: package-arm64

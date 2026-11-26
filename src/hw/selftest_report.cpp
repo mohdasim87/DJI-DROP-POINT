@@ -162,6 +162,23 @@ std::string BuildSelftestReport(const SelftestFacts& in, bool* had_fail) {
         fail = true;
     }
 
+    // License: arming is refused when expired, so with the aircraft link
+    // it is a FAIL; under --no-link it is a WARN (the bench machine may be
+    // a fresh checkout with no state dir).
+    if (!in.license_text.empty()) {
+        if (in.license_expired) {
+            if (in.link) {
+                Line(os, "FAIL", "license expired — install a vendor key "
+                                 "(droppoint --license-install, docs/SETUP-MANUAL.md)");
+                fail = true;
+            } else {
+                Line(os, "WARN", "license expired: " + in.license_text);
+            }
+        } else {
+            Line(os, "INFO", "license: " + in.license_text);
+        }
+    }
+
     // ---- checks that need the aircraft link --------------------------------
     if (!in.link) {
         Line(os, "SKIP", "PSDK link not established (--no-link): aircraft model match, "

@@ -14,6 +14,8 @@
 #include "core/solution.h"
 #include "external_operator_release.h"
 #include "guidance_loop.h"
+#include "hw/device_id.h"
+#include "hw/license_state.h"
 #include "sim/scenario.h"
 #include "sim/scripted_pilot.h"
 #include "sim/sim_hal.h"
@@ -21,8 +23,13 @@
 #include "util/config.h"
 #include "util/crt_silence.h"
 #include "util/drop_kits.h"
+#include "util/license.h"
+#include "util/license_pubkey.h"
 #include "util/logging.h"
 #include "util/version.h"
+
+#include <fstream>
+#include <sstream>
 
 namespace {
 
@@ -42,7 +49,29 @@ void PrintUsage() {
         "  PPS sync active, config validity, and per-profile calibration status.\n"
         "  Status: unverified — the PSDK-backed checks require hardware; this build\n"
         "  only runs the checks that do not need PSDK (config load, DEM directory,\n"
-        "  release GPIO responsiveness if --release-gpio-chip is given).\n");
+        "  release GPIO responsiveness if --release-gpio-chip is given).\n"
+        "--device-id prints the machine's license device code and exits.\n"
+        "--license-status prints trial/licence state (exit 1 when expired).\n"
+        "--license-install <file> validates and installs a license file.\n");
+}
+
+std::int64_t NowUnixS() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+std::string LicenseStatusText(const droppoint::hw::LicenseStatus& s) {
+    using droppoint::hw::LicenseKind;
+    switch (s.kind) {
+        case LicenseKind::kLicensed: return "licensed";
+        case LicenseKind::kTrial:
+            return "trial, " + std::to_string(s.days_left) + " day(s) left";
+        case LicenseKind::kExpired: return "trial expired, no license";
+        case LicenseKind::kUnlicensedNoId: return "trial expired, no device identity";
+        case LicenseKind::kBadLicense: return "bad license: " + s.reason;
+    }
+    return "unknown";
 }
 
 const char* PlatformName(droppoint::util::config::PsdkPlatform platform) {
@@ -103,6 +132,19 @@ int RunSelfTest(const std::string& config_dir) {
         std::printf("%s  airframe calibrated: %s\n",
                     cfg.aircraft.airframe_calibrated ? "[OK]  " : "[WARN]",
                     cfg.aircraft.airframe_calibrated ? "yes" : "NO (uncalibrated placeholder)");
+
+        try {
+            const auto lic = droppoint::hw::CheckLicenseNow(
+                config_dir, droppoint::util::license::kEmbeddedPublicKeyHex, NowUnixS());
+            const bool warn =
+                lic.kind != droppoint::hw::LicenseKind::kLicensed &&
+                (lic.kind != droppoint::hw::LicenseKind::kTrial ||
+                 lic.days_left <= droppoint::hw::kTrialWarnDays);
+            std::printf("%s license: %s (device %s)\n", warn ? "[WARN]" : "[INFO]",
+                        LicenseStatusText(lic).c_str(), lic.device_code.c_str());
+        } catch (const std::exception& e) {
+            std::printf("[WARN] license check failed: %s\n", e.what());
+        }
     } catch (const std::exception& e) {
         std::printf("[FAIL] config invalid: %s\n", e.what());
         return 1;
@@ -312,6 +354,9 @@ int main(int argc, char** argv) {
     bool selftest = false;
     bool list_kits = false;
     bool config_explicit = false;
+    bool device_id_flag = false;
+    bool license_status_flag = false;
+    std::string license_install_file;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--sim" && i + 1 < argc) {
@@ -329,10 +374,53 @@ int main(int argc, char** argv) {
             profile_dir = argv[++i];
         } else if (arg == "--credentials" && i + 1 < argc) {
             ++i;  // consumed, PSDK-backed startup path only (not this sim build)
+        } else if (arg == "--device-id") {
+            device_id_flag = true;
+        } else if (arg == "--license-status") {
+            license_status_flag = true;
+        } else if (arg == "--license-install" && i + 1 < argc) {
+            license_install_file = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return 0;
         }
+    }
+
+    if (device_id_flag) {
+        std::printf("%s\n",
+                    droppoint::hw::DeviceCode(droppoint::hw::DeviceIdRoot()).c_str());
+        return 0;
+    }
+
+    if (license_status_flag || !license_install_file.empty()) {
+        namespace lic = droppoint::util::license;
+        const std::string root = droppoint::hw::DeviceIdRoot();
+        const std::int64_t today = lic::UnixSecondsToLicenseDays(NowUnixS());
+        if (license_status_flag) {
+            const auto s = droppoint::hw::CheckLicense(
+                config_dir, lic::kEmbeddedPublicKeyHex, today, root);
+            std::printf("device: %s\n", s.device_code.c_str());
+            std::printf("status: %s\n", LicenseStatusText(s).c_str());
+            return (s.kind == droppoint::hw::LicenseKind::kLicensed ||
+                    s.kind == droppoint::hw::LicenseKind::kTrial)
+                       ? 0
+                       : 1;
+        }
+        std::ifstream lf(license_install_file, std::ios::binary);
+        if (!lf) {
+            std::fprintf(stderr, "cannot read %s\n", license_install_file.c_str());
+            return 1;
+        }
+        std::ostringstream lss;
+        lss << lf.rdbuf();
+        const auto r = droppoint::hw::InstallLicense(lss.str(), config_dir,
+                                                     lic::kEmbeddedPublicKeyHex, today, root);
+        if (!r.ok) {
+            std::fprintf(stderr, "license NOT installed: %s\n", r.error.c_str());
+            return 1;
+        }
+        std::printf("license installed: %s\n", r.path.c_str());
+        return 0;
     }
 
     if (list_kits) {

@@ -24,6 +24,7 @@ set(DROPPOINT_TEST_SOURCES
     test_file_ownership.cpp
     test_drop_kits.cpp
     test_auth_chip.cpp
+    test_license.cpp
 )
 
 if(DROPPOINT_BUILD_PSDK)
@@ -31,7 +32,7 @@ if(DROPPOINT_BUILD_PSDK)
 endif()
 
 add_executable(droppoint_core_tests ${DROPPOINT_TEST_SOURCES})
-target_link_libraries(droppoint_core_tests PRIVATE droppoint_core droppoint_util droppoint_app droppoint_sim droppoint_hw yaml-cpp)
+target_link_libraries(droppoint_core_tests PRIVATE droppoint_core droppoint_util droppoint_app droppoint_sim droppoint_hw yaml-cpp monocypher)
 target_include_directories(droppoint_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(DROPPOINT_BUILD_PSDK)

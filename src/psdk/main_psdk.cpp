@@ -30,8 +30,10 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -63,10 +65,14 @@
 #include "psdk/rangefinder_camera_manager.h"
 #include "psdk/release_widget.h"
 #include "hw/auth_chip.h"
+#include "hw/device_id.h"
+#include "hw/license_state.h"
 #include "hw/selftest_report.h"
 #include "psdk/telemetry_subscription.h"
 #include "psdk/widget_bridge.h"
 #include "util/config.h"
+#include "util/license.h"
+#include "util/license_pubkey.h"
 #include "util/drop_kits.h"
 #include "util/drop_log.h"
 #include "util/logging.h"
@@ -115,6 +121,11 @@ void Usage() {
         "  droppoint --probe-widgets <mount position> [path flags]\n"
         "  droppoint --list-kits [--config <dir>]  (with --config, marks the\n"
         "                                         kits that fit that aircraft)\n"
+        "  droppoint --device-id             (prints the DJI-... code the\n"
+        "                                   vendor binds your license to)\n"
+        "  droppoint --license-status        (trial/licence state; exit 1\n"
+        "                                   when expired or invalid)\n"
+        "  droppoint --license-install <file>  (validate + install a .lic)\n"
         "  droppoint --version\n",
         droppoint::util::kVersionString, droppoint::util::kBuildVersion);
 }
@@ -223,6 +234,57 @@ T_DjiUserInfo MakeUserInfo(const droppoint::psdk::Credentials& creds) {
     return info;
 }
 
+// ---- licensing helpers -----------------------------------------------------
+
+std::int64_t NowUnixS() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+bool LicenseAllowsArming(const droppoint::hw::LicenseStatus& s) {
+    return s.kind == droppoint::hw::LicenseKind::kLicensed ||
+           s.kind == droppoint::hw::LicenseKind::kTrial;
+}
+
+// Floating-window addendum: trial countdown in the last warn window, or a
+// flag for any non-arming state (the hard gate carries the real hold).
+std::string LicenseWindowLine(const droppoint::hw::LicenseStatus& s) {
+    using droppoint::hw::LicenseKind;
+    if (s.kind == LicenseKind::kTrial && s.days_left <= droppoint::hw::kTrialWarnDays) {
+        return "LICENSE: " + std::to_string(s.days_left) + "D LEFT";
+    }
+    if (s.kind == LicenseKind::kBadLicense) {
+        return "LICENSE INVALID - CONTACT VENDOR";
+    }
+    return "";
+}
+
+std::string LicenseStatusText(const droppoint::hw::LicenseStatus& s) {
+    using droppoint::hw::LicenseKind;
+    std::string t;
+    switch (s.kind) {
+        case LicenseKind::kLicensed:
+            t = "licensed (bound to this device";
+            if (!s.license_path.empty()) t += ", " + s.license_path;
+            t += ")";
+            break;
+        case LicenseKind::kTrial:
+            t = "trial, " + std::to_string(s.days_left) + " day(s) left";
+            if (!s.trial_persistent) t += " [state not persistent]";
+            break;
+        case LicenseKind::kExpired: t = "trial expired, no license"; break;
+        case LicenseKind::kUnlicensedNoId:
+            t = "trial expired and no device identity";
+            break;
+        case LicenseKind::kBadLicense: t = "bad license: " + s.reason; break;
+    }
+    if (!s.reason.empty() && s.kind != LicenseKind::kBadLicense) {
+        t += " (note: " + s.reason + ")";
+    }
+    return t;
+}
+
 void CheckDji(T_DjiReturnCode code, const char* what) {
     if (code != DJI_ERROR_SYSTEM_MODULE_CODE_SUCCESS) {
         throw std::runtime_error(std::string(what) + " failed (DJI error 0x" +
@@ -240,6 +302,9 @@ int main(int argc, char** argv) {
     bool verbose = false;
     bool list_kits = false;
     bool check_auth_chip = false;
+    bool device_id_flag = false;
+    bool license_status_flag = false;
+    std::string license_install_file;
     int probe_position = -1;
 
     for (int i = 1; i < argc; ++i) {
@@ -260,6 +325,12 @@ int main(int argc, char** argv) {
             list_kits = true;
         } else if (arg == "--check-auth-chip") {
             check_auth_chip = true;
+        } else if (arg == "--device-id") {
+            device_id_flag = true;
+        } else if (arg == "--license-status") {
+            license_status_flag = true;
+        } else if (arg == "--license-install" && i + 1 < argc) {
+            license_install_file = argv[++i];
         } else if (arg == "--version") {
             std::printf("droppoint %s (build %s)\n", droppoint::util::kVersionString,
                         droppoint::util::kBuildVersion);
@@ -283,6 +354,50 @@ int main(int argc, char** argv) {
     const fs::path exe_dir = fs::absolute(argv[0]).parent_path();
 
     try {
+        // ---- --device-id: prints the code the customer sends the vendor.
+        // No config needed — it is a property of this machine only.
+        if (device_id_flag) {
+            std::printf("%s\n", droppoint::hw::DeviceCode(droppoint::hw::DeviceIdRoot()).c_str());
+            return 0;
+        }
+
+        // ---- --license-status / --license-install: need the config dir only
+        // to find <config>/license.key, not the YAML — resolve it loosely.
+        if (license_status_flag || !license_install_file.empty()) {
+            std::string cfg_dir = explicit_config.empty() ? "config" : explicit_config;
+            if (!std::filesystem::exists(fs::path(cfg_dir) / "aircraft.yaml")) {
+                try {
+                    cfg_dir = ResolveConfigDir(explicit_config, exe_dir);
+                } catch (...) {
+                    cfg_dir = explicit_config.empty() ? "." : explicit_config;
+                }
+            }
+            const std::string root = droppoint::hw::DeviceIdRoot();
+            if (license_status_flag) {
+                const auto s = droppoint::hw::CheckLicenseNow(
+                    cfg_dir, droppoint::util::license::kEmbeddedPublicKeyHex, NowUnixS());
+                std::printf("device: %s\n", s.device_code.c_str());
+                std::printf("status: %s\n", LicenseStatusText(s).c_str());
+                return LicenseAllowsArming(s) ? 0 : 1;
+            }
+            std::ifstream lf(license_install_file, std::ios::binary);
+            if (!lf) {
+                std::fprintf(stderr, "cannot read %s\n", license_install_file.c_str());
+                return 1;
+            }
+            std::ostringstream lss;
+            lss << lf.rdbuf();
+            const auto r = droppoint::hw::InstallLicense(
+                lss.str(), cfg_dir, droppoint::util::license::kEmbeddedPublicKeyHex,
+                droppoint::util::license::UnixSecondsToLicenseDays(NowUnixS()), root);
+            if (!r.ok) {
+                std::fprintf(stderr, "license NOT installed: %s\n", r.error.c_str());
+                return 1;
+            }
+            std::printf("license installed: %s\n", r.path.c_str());
+            return 0;
+        }
+
         // ---- --list-kits: catalogue dump, no config/link work unless the
         // user asked for the fit marks via --config --------------------------
         if (list_kits) {
@@ -299,6 +414,26 @@ int main(int argc, char** argv) {
         DP_LOG_INFO("main", std::string("droppoint build ") + droppoint::util::kBuildVersion +
                                 " starting; config dir: " + config_dir);
         const Config cfg = droppoint::util::config::LoadAll(config_dir);
+
+        // ---- license: computed once at startup; the guidance loop re-checks
+        // cheaply via LicenseMonitor. Never throws — a failure is a status,
+        // not a crash.
+        droppoint::hw::LicenseMonitor license_monitor(
+            config_dir, droppoint::util::license::kEmbeddedPublicKeyHex,
+            droppoint::hw::DeviceIdRoot());
+        // A license-check failure is a status, never a crash: Poll is
+        // exception-free by design, but belt-and-braces here so a future
+        // throw can't take down the flight loop.
+        droppoint::hw::LicenseStatus license_status;
+        try {
+            license_status = license_monitor.Poll(NowUnixS());
+        } catch (const std::exception& e) {
+            DP_LOG_ERROR("main", std::string("license check threw: ") + e.what());
+            license_status.kind = droppoint::hw::LicenseKind::kBadLicense;
+            license_status.reason = "license check failed";
+        }
+        DP_LOG_INFO("main", "license: " + LicenseStatusText(license_status) +
+                                " (device " + license_status.device_code + ")");
 
         // ---- --check-auth-chip: reset + probe 0x2A, no aircraft link --------
         if (check_auth_chip) {
@@ -489,6 +624,9 @@ int main(int argc, char** argv) {
             si.auth_chip_gpio_node_present =
                 cfg.aircraft.auth_chip.enabled &&
                 fs::exists(cfg.aircraft.auth_chip.reset_gpio_chip);
+            si.license_text = LicenseStatusText(license_status) + " (device " +
+                              license_status.device_code + ")";
+            si.license_expired = !LicenseAllowsArming(license_status);
             bool had_fail = false;
             std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::string save_path;
@@ -633,6 +771,9 @@ int main(int argc, char** argv) {
             si.auth_chip_gpio_node_present =
                 cfg.aircraft.auth_chip.enabled &&
                 fs::exists(cfg.aircraft.auth_chip.reset_gpio_chip);
+            si.license_text = LicenseStatusText(license_status) + " (device " +
+                              license_status.device_code + ")";
+            si.license_expired = !LicenseAllowsArming(license_status);
             bool had_fail = false;
             std::string report = droppoint::hw::BuildSelftestReport(si, &had_fail);
             std::string save_path;
@@ -697,6 +838,12 @@ int main(int argc, char** argv) {
         droppoint::app::GuidanceLoop loop(telemetry, gimbal, *rangefinder, display, *audio,
                                           liveview, *release, {&crosshair}, loop_cfg);
 
+        // License state into the loop: startup verdict + the 60 s device-id
+        // splash on Pilot 2's floating window.
+        loop.SetLicenseStatus(LicenseAllowsArming(license_status),
+                              LicenseWindowLine(license_status));
+        loop.ShowDeviceId(license_status.device_code, 60.0);
+
         droppoint::hw::SdNotifyReady();
         DP_LOG_INFO("main", "guidance loop running at " +
                                 std::to_string(cfg.system.guidance_loop_hz) + " Hz");
@@ -741,6 +888,15 @@ int main(int argc, char** argv) {
             st.ambient_temperature_c = loop.AmbientTemperatureC();
             st.surface_index = loop.SurfaceIndex();
             operator_inputs.UpdateStatus(st);
+
+            // License re-check is cheap (mtime watch); a mid-flight expiry
+            // blocks future ARM presses, never an in-progress drop or abort.
+            try {
+                const auto lic = license_monitor.Poll(NowUnixS());
+                loop.SetLicenseStatus(LicenseAllowsArming(lic), LicenseWindowLine(lic));
+            } catch (const std::exception& e) {
+                DP_LOG_WARN("main", std::string("license poll threw: ") + e.what());
+            }
 
             auto inputs = operator_inputs.Drain(NowUs());
             const auto solution = loop.Tick(inputs);

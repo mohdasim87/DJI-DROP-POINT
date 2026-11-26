@@ -120,11 +120,17 @@ EOF
 install -m 755 "$ROOT/bin/droppoint" "$PKGDIR/bin/droppoint"
 
 # userconfig paths land at the package root: config/ then assets/.
+# license.key is deliberately NOT a *.yaml — it is never packed here; the
+# customer's own key is installed later via `droppoint --license-install`
+# (SSH/dji_app_ctl) or copied in before install.
 for f in "$ROOT"/config/*.yaml; do
     # the example file ships no real values; never pack it into a customer dpk
     [[ "$(basename "$f")" == "credentials.example.yaml" ]] && continue
     install -m 644 "$f" "$PKGDIR/config/"
 done
+# belt & braces: even if a license file ended up with a .yaml suffix by
+# accident it must not ship
+rm -f "$PKGDIR/config/license.key" "$PKGDIR/config/license.yaml"
 install -m 600 "$CREDENTIALS" "$PKGDIR/config/credentials.yaml"
 
 [[ -d "$ROOT/assets" ]] && cp -r "$ROOT/assets" "$PKGDIR/assets"

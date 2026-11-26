@@ -50,6 +50,12 @@ struct SelftestFacts {
     bool widget_dir_ok = false;
     bool auth_chip_i2c_node_present = false;   // auth_chip.i2c_device exists
     bool auth_chip_gpio_node_present = false;  // auth_chip.reset_gpio_chip exists
+    // License: kind text ("trial, 27 day(s) left", "licensed", "EXPIRED",
+    // "bad license: ...") and whether it blocks arming. Expired/bad is a
+    // FAIL with the aircraft link and a WARN under --no-link (a bench
+    // machine may legitimately sit past trial).
+    std::string license_text;
+    bool license_expired = false;
 };
 
 // One [OK]/[WARN]/[FAIL]/[SKIP]/[INFO] line per check, in a stable order.

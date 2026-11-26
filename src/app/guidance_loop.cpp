@@ -94,6 +94,7 @@ core::gating::Inputs GuidanceLoop::BuildGateInputs(const core::AircraftState& ai
     in.wind_model_calibrated = config_.wind_model_calibrated;
     in.gust_sigma_mps = gust_sigma_mps;
     in.payload_calibrated = active_payload_.calibrated;
+    in.license_ok = license_ok_;
 
     // Crosswind gate: on a run-in only the cross-track component of the wind
     // pushes the impact off the line; in a hover the payload drifts with the
@@ -117,7 +118,8 @@ core::gating::Inputs GuidanceLoop::BuildGateInputs(const core::AircraftState& ai
 
 std::string GuidanceLoop::BuildFloatingWindowText(const core::Solution& solution,
                                                    const core::gating::Evaluation& gates,
-                                                   const core::AircraftState& aircraft) const {
+                                                   const core::AircraftState& aircraft,
+                                                   std::uint64_t now_us) const {
     const core::Target& target = mission_.CurrentTarget();
     char buf[256];
     std::string text;
@@ -194,6 +196,18 @@ std::string GuidanceLoop::BuildFloatingWindowText(const core::Solution& solution
                 break;
             }
         }
+    }
+
+    // License warning ("LICENSE: Nd LEFT") rides every screen; the expired
+    // case needs no extra line — the hard gate above IS the screen.
+    if (!license_line_.empty()) {
+        text += "\n" + license_line_;
+    }
+
+    // Startup device-id display (~60 s after launch): the customer copies
+    // the code off Pilot 2 and sends it to the vendor.
+    if (device_id_started_ && now_us < device_id_until_us_) {
+        text += "\nID: " + pending_device_id_;
     }
 
     // ASCII-only, hard 255-byte budget for the floating window channel.
@@ -436,6 +450,14 @@ core::Solution GuidanceLoop::Tick(const CycleInputs& in) {
         solution.no_solution_reason = target.valid ? "no valid aircraft state" : "no target latched";
     }
 
+    // Device-id display window starts on the first Tick (the loop's time
+    // domain isn't the construction-time clock's).
+    if (!device_id_started_ && pending_device_id_s_ > 0.0) {
+        device_id_started_ = true;
+        device_id_until_us_ =
+            in.now_us + static_cast<std::uint64_t>(pending_device_id_s_ * 1e6);
+    }
+
     const core::gating::Inputs gate_inputs =
         BuildGateInputs(aircraft, solution, acceleration, wind, wind_valid, gust_sigma_mps);
     core::gating::Thresholds thresholds = config_.gate_thresholds;
@@ -486,7 +508,7 @@ core::Solution GuidanceLoop::Tick(const CycleInputs& in) {
             : static_cast<std::uint64_t>(1e6 / config_.floating_window_hz);
     const bool state_changed = !have_display_state_ || mission_.Id() != last_display_state_;
     if (state_changed || in.now_us - last_display_us_ >= min_interval_us) {
-        display_.ShowMessage(BuildFloatingWindowText(solution, gates, aircraft));
+        display_.ShowMessage(BuildFloatingWindowText(solution, gates, aircraft, in.now_us));
         last_display_us_ = in.now_us;
         last_display_state_ = mission_.Id();
         have_display_state_ = true;

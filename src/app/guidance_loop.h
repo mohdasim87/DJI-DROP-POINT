@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "core/ballistics.h"
@@ -97,13 +98,29 @@ public:
     double AmbientTemperatureC() const { return temperature_c_; }
     int SurfaceIndex() const { return surface_index_; }
 
+    // Licensing: main feeds the hw::LicenseMonitor verdict in here every
+    // cycle. ok=false trips the kLicenseExpired hard gate (ARM refused;
+    // the abort path in ReleaseManager is not gated). window_line is the
+    // trailing "LICENSE: Nd LEFT" warning, empty when there's nothing to
+    // say. ShowDeviceId displays "ID: DJI-..." on the no-target screen for
+    // `seconds` of loop time after the next Tick — the customer reads the
+    // device code off Pilot 2 without a shell.
+    void SetLicenseStatus(bool ok, const std::string& window_line) {
+        license_ok_ = ok;
+        license_line_ = window_line;
+    }
+    void ShowDeviceId(const std::string& code, double seconds) {
+        pending_device_id_ = code;
+        pending_device_id_s_ = seconds;
+    }
+
 private:
     void UpdateDatumBiasFromRangefinder(std::uint64_t now_us);
     core::gating::Inputs BuildGateInputs(const core::AircraftState& aircraft, const core::Solution& solution,
                                           double acceleration_mps2, const core::WindSample& wind,
                                           bool wind_valid, double gust_sigma_mps) const;
     std::string BuildFloatingWindowText(const core::Solution& solution, const core::gating::Evaluation& gates,
-                                         const core::AircraftState& aircraft) const;
+                                         const core::AircraftState& aircraft, std::uint64_t now_us) const;
     void AppendDropLogEntry(const core::AircraftState& aircraft, const core::Solution& solution,
                             const core::gating::Evaluation& gates);
 
@@ -143,6 +160,14 @@ private:
     std::uint64_t last_display_us_ = 0;
     MissionStateId last_display_state_ = MissionStateId::kIdle;
     bool have_display_state_ = false;
+
+    // License state fed by main (see SetLicenseStatus / ShowDeviceId).
+    bool license_ok_ = true;
+    std::string license_line_;
+    std::string pending_device_id_;
+    double pending_device_id_s_ = 0.0;
+    std::uint64_t device_id_until_us_ = 0;
+    bool device_id_started_ = false;
 };
 
 }  // namespace droppoint::app

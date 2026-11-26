@@ -11,9 +11,13 @@ CMakeFiles/
 CMakeCache.txt
 compile_commands.json
 config/credentials.yaml
-third_party/
+# third_party holds vendored sources that ARE committed (monocypher) —
+# only the PSDK clone is ignored.
+third_party/psdk/
 dist/
 *.dpk
 docs/howto/howto.html
 docs/howto/setup-manual.html
 __pycache__/
+license-keys/
+*.lic

@@ -14,4 +14,4 @@ target_compile_features(droppoint_app PUBLIC cxx_std_17)
 target_link_libraries(droppoint_app PUBLIC droppoint_core droppoint_hal droppoint_util)
 
 add_executable(droppoint_sim_main main.cpp)
-target_link_libraries(droppoint_sim_main PRIVATE droppoint_app droppoint_sim droppoint_util)
+target_link_libraries(droppoint_sim_main PRIVATE droppoint_app droppoint_sim droppoint_util droppoint_hw)

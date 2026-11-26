@@ -9,6 +9,8 @@ add_library(droppoint_util STATIC
     config.cpp
     drop_kits.cpp
     drop_log.cpp
+    sha256.cpp
+    license.cpp
 )
 target_include_directories(droppoint_util PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -16,4 +18,4 @@ target_include_directories(droppoint_util PUBLIC
     ${CMAKE_BINARY_DIR}/generated
 )
 target_compile_features(droppoint_util PUBLIC cxx_std_17)
-target_link_libraries(droppoint_util PUBLIC droppoint_core yaml-cpp::yaml-cpp)
+target_link_libraries(droppoint_util PUBLIC droppoint_core yaml-cpp::yaml-cpp monocypher)

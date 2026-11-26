@@ -24,6 +24,13 @@ void Add(Evaluation& eval, GateId id, GateSeverity sev, bool tripped, std::strin
 Evaluation Evaluate(const Inputs& in, const Thresholds& th) {
     Evaluation eval;
 
+    // License first: an expired/unlicensed build must hold before any
+    // other reason so the floating window explains itself. Abort paths in
+    // the release manager don't consult gates — safety stays ahead of
+    // licensing.
+    Add(eval, GateId::kLicenseExpired, GateSeverity::kHard, !in.license_ok,
+        "LICENSE EXPIRED - CONTACT VENDOR");
+
     Add(eval, GateId::kNoTarget, GateSeverity::kHard, !in.target_latched,
         "NO TARGET - AIM AND PRESS SET TARGET");
     Add(eval, GateId::kTargetStale, GateSeverity::kHard,

@@ -29,6 +29,56 @@ export DEBIAN_FRONTEND=noninteractive
 dpkg -i "$DEB"
 "$BIN/droppoint" --version
 "$BIN/droppoint" --list-kits
+
+# ---- licensing --------------------------------------------------------------
+# device code is deterministic on one machine (machine-id inside the container)
+ID1="$("$BIN/droppoint" --device-id | grep -o 'DJI-[A-Z0-9-]*')"
+ID2="$("$BIN/droppoint" --device-id | grep -o 'DJI-[A-Z0-9-]*')"
+test -n "$ID1" && [ "$ID1" = "$ID2" ] || {
+  echo "::error::--device-id not deterministic: '$ID1' vs '$ID2'"
+  exit 1
+}
+# fresh install is inside the 30-day trial -> exit 0
+"$BIN/droppoint" --license-status --config "$CFGDIR"
+test $? -eq 0
+# license roundtrip: droppoint-license (mounted, not shipped) makes a key for
+# THIS machine's device code; install into a DP_TEST_ROOT sandbox so the real
+# /etc stays untouched
+LICTOOL="${DP_LICENSE_TOOL:-/dist/droppoint-license}"
+# the shipped binary embeds the vendor's real public key, which CI cannot
+# sign for — DP_LICENSE_PUBKEY_HEX swaps in the committed throwaway test key
+# (tests/data/license_test_*.key) for this sandboxed roundtrip.
+TESTPUB="$(cat /creds/license_test_public.key 2>/dev/null || true)"
+if [ -x "$LICTOOL" ] && [ -n "$TESTPUB" ]; then
+  LICROOT="$TMPD/licroot"
+  mkdir -p "$LICROOT/etc/droppoint" "$LICROOT/var/lib/droppoint" \
+           "$LICROOT/var/log/droppoint"
+  cp /etc/machine-id "$LICROOT/etc/machine-id" 2>/dev/null || true
+  "$LICTOOL" make --key /creds/license_test_private.key \
+    --device "$ID1" --days 365 --out "$TMPD/test.lic"
+  DP_TEST_ROOT="$LICROOT" DP_LICENSE_PUBKEY_HEX="$TESTPUB" \
+    "$BIN/droppoint" --license-install "$TMPD/test.lic"
+  DP_TEST_ROOT="$LICROOT" DP_LICENSE_PUBKEY_HEX="$TESTPUB" \
+    "$BIN/droppoint" --license-status --config "$CFGDIR" \
+    | grep -q 'status: licensed'
+  # a license bound to a different device must be refused
+  "$LICTOOL" make --key /creds/license_test_private.key \
+    --device DJI-AAAAA-AAAAA-AAAAA --days 365 --out "$TMPD/wrong.lic"
+  if DP_TEST_ROOT="$LICROOT" DP_LICENSE_PUBKEY_HEX="$TESTPUB" \
+      "$BIN/droppoint" --license-install "$TMPD/wrong.lic" 2>/dev/null; then
+    echo "::error::license for a different device was installed"
+    exit 1
+  fi
+  # and an unsigned/garbage file must be refused too
+  echo "DPL1-AAAA" > "$TMPD/garbage.lic"
+  if DP_TEST_ROOT="$LICROOT" DP_LICENSE_PUBKEY_HEX="$TESTPUB" \
+      "$BIN/droppoint" --license-install "$TMPD/garbage.lic" 2>/dev/null; then
+    echo "::error::garbage license was installed"
+    exit 1
+  fi
+else
+  echo "::notice::droppoint-license or test pubkey not mounted — skipping license roundtrip"
+fi
 "$BIN/droppoint" --selftest --no-link --config "$CFGDIR" || {
   echo '::error::selftest failed — dumping report log if present'
   cat "$LOGD/selftest.txt" ./data/logs/selftest.txt 2>/dev/null || true

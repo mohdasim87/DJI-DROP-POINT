@@ -420,6 +420,7 @@ Stop and resolve anything that does not behave as described.
 | `XX HOLD - NO TERRAIN ELEVATION AVAILABLE` | Started in the air, or no tile and flat fallback off | Land, restart on the ground; add tiles |
 | `XX HOLD - GNSS SATELLITE COUNT LOW` | Fewer than 12 satellites | Wait in the open |
 | AUTO cannot be selected | The drop kit is operator-triggered | Expected; use MANUAL |
+| `XX HOLD - LICENSE EXPIRED - CONTACT VENDOR` | The 30-day trial ran out | Send your device code to the vendor and install the `.lic` you get back (chapter 16) |
 | `.dpk` will not install | App ID or version mismatch, or example credentials | Remake it with your real credentials |
 
 ## 15. Upgrades, logs and removal
@@ -432,3 +433,41 @@ Stop and resolve anything that does not behave as described.
 | Remove (keeps credentials and logs) | `sudo dpkg -r droppoint-<aircraft>` |
 
 {{shot:s6-m4t-upgrade|Real capture: an upgrade keeps settings and credentials; removal keeps credentials and logs.}}
+
+## 16. License
+
+DropPoint runs a **30-day trial** from the first time it starts on a
+machine. Everything works during the trial. From day 20 the status window
+adds a `LICENSE: Nd LEFT` countdown line. After day 30 it refuses to ARM —
+the window reads `LICENSE EXPIRED - CONTACT VENDOR` — until you install a
+license. ABORT always works; safety is never gated by the license.
+
+Getting a license takes three steps:
+
+1. **Read your device code.** Either run `droppoint --device-id`, or just
+   look at the status window — for the first minute after every start it
+   shows `ID: DJI-XXXXX-XXXXX-XXXXX`. The code is derived from the
+   companion computer itself (the Raspberry Pi or the Manifold 3), not the
+   aircraft. Rebuilds and reinstalls on the same computer keep the same
+   code; moving the software to a different computer changes it.
+2. **Send the code to the vendor.** You get back a short text file
+   (`*.lic`) containing one `DPL1-...` line.
+3. **Install it.** `sudo droppoint --license-install yourfile.lic` (on the
+   Manifold 3, run the same command inside the app files over
+   `dji_app_ctl`/SSH — `droppoint-make-dpk` never packs a license into the
+   `.dpk`, so the key is always installed on the device itself).
+   `droppoint --license-status` prints `status: licensed`.
+
+`--license-install` checks the license before writing it: a license for a
+different device, an expired one, or a corrupt file is refused with the
+reason printed. Licenses live at `/etc/droppoint/license.key` (or
+`config/license.key` inside a `.dpk`) and are never overwritten or removed
+by upgrades or package removal — like your credentials, they are site data.
+
+Two honest notes. The package contains compiled binaries only — a binary
+cannot be made unreadable or uncopyable, so the protection is not the
+binary but the license binding to your computer. And the trial clock is a
+file on disk (`/var/lib/droppoint/license.state` plus a mirror in
+`/var/log/droppoint/`): wiping both resets the trial. We treat that as an
+accepted limitation — a locked-down filesystem would break normal service
+operation — but be aware of it before reselling hardware.

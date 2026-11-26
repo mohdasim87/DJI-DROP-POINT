@@ -149,6 +149,9 @@ udevadm control --reload-rules 2>/dev/null || true
 
 mkdir -p /var/log/droppoint
 chown -R droppoint:droppoint /var/log/droppoint
+# license trial state (primary file; the log dir holds the mirror copy)
+mkdir -p /var/lib/droppoint
+chown -R droppoint:droppoint /var/lib/droppoint
 mkdir -p /etc/droppoint
 
 # Placeholder credentials only when absent — never overwrite a real file.

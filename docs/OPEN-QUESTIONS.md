@@ -344,3 +344,20 @@ aircraft publishes or at what maximum rate. `droppoint --selftest` on the
 aircraft lists each topic as acquired or missing; record the result here for
 both aircraft. If `GIMBAL_ANGLES` is missing, crosshair designation cannot
 work and the gimbal attitude will have to come from somewhere else.
+
+---
+
+## 16. License trial reset and binding scope (accepted limitations)
+
+The 30-day trial is anchored by two state files
+(`/var/lib/droppoint/license.state` and its mirror
+`/var/log/droppoint/.lic_state`). Wiping BOTH resets the trial — this is an
+accepted limitation, documented in the setup manual's license chapter; a
+tamper-proof clock is not achievable in a plain Linux service without
+hardware support.
+
+Hardware-bound licenses bind to the **companion computer** (Raspberry Pi /
+Manifold 3 board identity), not to the aircraft. Swapping aircraft keeps
+the license; moving DropPoint to a different companion computer requires a
+new license. `DP_LICENSE_PUBKEY_HEX` is a test-only public-key override;
+an attacker who can set the service's environment already owns the host.

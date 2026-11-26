@@ -38,6 +38,7 @@ enum class GateId {
     kNoDropPolygonViolation,
     kNoWindEstimate,
     kWindModelUncalibrated,
+    kLicenseExpired,
 };
 
 enum class GateSeverity { kHard, kSoft };
@@ -90,6 +91,7 @@ struct Inputs {
     bool predicted_impact_in_no_drop_polygon = false;
     bool wind_valid = true;               // active wind source (telemetry topic or estimator) produced a sample
     bool wind_model_calibrated = true;    // aircraft CdA/mass calibration state, soft gate
+    bool license_ok = true;               // hw::LicenseStatus says arming is allowed (trial/licensed)
 };
 
 struct Evaluation {
