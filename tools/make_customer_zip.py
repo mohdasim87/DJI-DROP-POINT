@@ -130,6 +130,8 @@ def main() -> int:
         ("START-HERE.txt", START_HERE.encode()),
         ("docs/DropPoint-Setup-Manual.pdf",
          (REPO / "docs/DropPoint-Setup-Manual.pdf").read_bytes()),
+        ("docs/DropPoint-Product-Brief.pdf",
+         (REPO / "docs/DropPoint-Product-Brief.pdf").read_bytes()),
         ("docs/DropPoint-How-To.pdf",
          (REPO / "docs/DropPoint-How-To.pdf").read_bytes()),
         ("docs/Compatible-drop-kits.md",

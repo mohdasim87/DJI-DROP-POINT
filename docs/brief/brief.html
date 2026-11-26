@@ -1,0 +1,147 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  @page { size: A4; margin: 0 }
+  * { box-sizing: border-box; margin: 0; padding: 0 }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1c2430;
+         width: 210mm }
+  .page { width: 210mm; height: 296mm; padding: 14mm 15mm;
+          page-break-after: always; position: relative; overflow: hidden }
+  .page:last-child { page-break-after: auto }
+  h1 { font-size: 30pt; color: #0a3069; letter-spacing: -0.5px }
+  .tag { color: #4d5a6b; font-size: 11.5pt; margin-top: 3mm }
+  .band { background: #0a3069; color: #fff; border-radius: 8px;
+          padding: 6mm 7mm; margin-top: 7mm; font-size: 12.5pt; line-height: 1.5 }
+  .band b { color: #ffd76a }
+  h2 { font-size: 14pt; color: #0a3069; margin: 7mm 0 3mm;
+       border-bottom: 2px solid #0a3069; padding-bottom: 1.5mm }
+  .cols { display: flex; gap: 6mm }
+  .cols > div { flex: 1 }
+  .shot { width: 100%; border: 1px solid #d5dbe3; border-radius: 6px }
+  .cap { font-size: 8.5pt; color: #66707d; margin-top: 1.5mm; font-style: italic }
+  ol.flow { counter-reset: s; list-style: none; margin-top: 2mm }
+  ol.flow li { counter-increment: s; display: flex; gap: 4mm;
+               margin-bottom: 3.4mm; font-size: 10.5pt; line-height: 1.45 }
+  ol.flow li::before { content: counter(s); flex: 0 0 7mm; height: 7mm;
+        background: #0a3069; color: #fff; border-radius: 50%;
+        text-align: center; line-height: 7mm; font-weight: bold; font-size: 10pt }
+  ol.flow b { color: #0a3069 }
+  code { font-family: Consolas, monospace; background: #eef2f7;
+         border-radius: 3px; padding: 0 1.2mm; font-size: 9.5pt }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 2mm }
+  th { background: #0a3069; color: #fff; text-align: left; padding: 2mm 2.5mm }
+  td { border-bottom: 1px solid #dfe4ea; padding: 1.8mm 2.5mm }
+  tr:nth-child(even) td { background: #f4f7fa }
+  .feat { display: flex; flex-wrap: wrap; gap: 3mm; margin-top: 3mm }
+  .feat div { flex: 1 1 45%; background: #f4f7fa; border-left: 3px solid #0a3069;
+              border-radius: 4px; padding: 2.8mm 3.5mm; font-size: 9.8pt; line-height: 1.4 }
+  .feat b { color: #0a3069 }
+  .foot { position: absolute; bottom: 8mm; left: 15mm; right: 15mm;
+          font-size: 8pt; color: #8b96a3; display: flex; justify-content: space-between }
+  .badge { display: inline-block; background: #eaf3ea; color: #1e6b32;
+           border: 1px solid #b8d9be; border-radius: 20px; padding: 1.2mm 4mm;
+           font-size: 9pt; font-weight: 600; margin-right: 2mm; margin-top: 2mm }
+  .sys { width: 100%; margin-top: 2mm }
+</style></head><body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<div class="page">
+  <h1>DropPoint</h1>
+  <div class="tag">Precision payload-drop guidance for DJI enterprise aircraft —
+      DJI Matrice 4T and Matrice 400</div>
+  <div class="band">DropPoint computes <b>where a payload will land</b> and
+      tells the operator <b>exactly when to release</b> — inside DJI Pilot 2,
+      the app your pilots already use. Nothing installs on the remote
+      controller.</div>
+
+  <h2>What the operator sees in DJI Pilot 2</h2>
+  <div class="cols">
+    <div>
+      <img class="shot" src="../howto/screens/s8-widgets-illustration.png">
+      <div class="cap">DropPoint's controls appear inside Pilot 2:
+        SET TARGET, CONFIRM, ARM, RELEASE, ABORT plus mode and payload
+        selectors.</div>
+    </div>
+    <div>
+      <img class="shot" src="../howto/screens/s9-floating-window.png">
+      <div class="cap">A floating window over the live feed shows the status,
+        steering command and countdown — updated continuously.</div>
+    </div>
+  </div>
+
+  <h2>How a drop works</h2>
+  <ol class="flow">
+    <li><div><b>Set target.</b> Put the camera crosshair on the landing spot
+        and press <code>SET TARGET</code>. DropPoint shows the range, bearing
+        and elevation source — press <code>CONFIRM</code>.</div></li>
+    <li><div><b>Arm.</b> One press. Every drop needs a fresh arm — the system
+        cannot fire twice from one arming.</div></li>
+    <li><div><b>Fly the approach.</b> The window steers the pilot:
+        <code>MOVE 4.0m BRG 265</code> — until it reads
+        <code>&gt;&gt; DROP OK</code>.</div></li>
+    <li><div><b>Countdown.</b> <code>T-3 … T-2 … T-1 … DROP</code> on screen,
+        with audible beeps where the aircraft supports them.</div></li>
+    <li><div><b>Release.</b> The operator triggers the drop kit — or, on the
+        Matrice 400 with a supported kit, DropPoint can release automatically
+        once every safety check passes.</div></li>
+    <li><div><b>Abort anytime.</b> <code>ABORT</code> disarms instantly from
+        any state — even mid-countdown — and the release output returns to
+        safe.</div></li>
+  </ol>
+
+  <div class="foot"><span>DropPoint — precision payload-drop guidance</span>
+    <span>page 1 of 2</span></div>
+</div>
+
+<!-- ============================ PAGE 2 ============================ -->
+<div class="page">
+  <h2>What it accounts for — continuously</h2>
+  <div class="feat">
+    <div><b>Ballistics.</b> Full trajectory integration with payload drag and
+        optional deployed drag area.</div>
+    <div><b>Wind.</b> Estimated in flight with an altitude gradient model —
+        crosswind beyond the profile limit holds the drop.</div>
+    <div><b>Terrain.</b> Ground elevation from terrain tiles or the laser
+        rangefinder (Matrice 400 + Manifold 3), tied to the take-off point.</div>
+    <div><b>Motion &amp; latency.</b> Aircraft velocity, camera latency and
+        release-mechanism delay are part of the solution, not afterthoughts.</div>
+    <div><b>Accuracy estimate.</b> A dispersion estimate (200-sample spread)
+        tells the operator the expected miss before committing.</div>
+    <div><b>Safety gates.</b> Stale target, low GNSS count, missing terrain,
+        excessive motion or out-of-corridor predictions all hold the drop.</div>
+  </div>
+
+  <h2>Compatible drop kits</h2>
+  <table>
+    <tr><th>Aircraft</th><th>Drop kits</th><th>Trigger</th></tr>
+    <tr><td><b>Matrice 4T</b><br>(200 g total payload)</td>
+        <td>JZ AD2 (43 g) · CZI FT4-P (50 g) · CZI TH2 (70 g)</td>
+        <td>Operator in Pilot 2</td></tr>
+    <tr><td><b>Matrice 400</b><br>(up to 6 kg payload)</td>
+        <td>CZI TH4 V3 · JZ PTS4 / UT4A / PL10 · DroMight Talon ·
+            Cybowindow 4-hook</td>
+        <td>Operator or DropPoint auto-release</td></tr>
+  </table>
+
+  <h2>Delivery &amp; licensing</h2>
+  <div class="feat">
+    <div><b>Ready to install.</b> Companion-computer package plus a step-by-step
+        setup manual with wiring diagrams, shopping list and bench test.</div>
+    <div><b>30-day full trial.</b> Everything works from day one. After the
+        trial, a license key bound to your aircraft's computer keeps it flying.</div>
+    <div><b>No controller app.</b> DJI Pilot 2 shows DropPoint's controls
+        automatically — no APK, no sideloading, nothing on the RC.</div>
+    <div><b>Practice mode.</b> A built-in scripted scenario lets crews train
+        the full drop sequence on the bench, no drone required.</div>
+  </div>
+
+  <div style="margin-top:7mm">
+    <span class="badge">Matrice 4T</span>
+    <span class="badge">Matrice 400</span>
+    <span class="badge">Manual or automatic release</span>
+    <span class="badge">30-day trial</span>
+    <span class="badge">Hardware-bound license</span>
+  </div>
+
+  <div class="foot"><span>DropPoint — precision payload-drop guidance</span>
+    <span>page 2 of 2</span></div>
+</div>
+</body></html>
